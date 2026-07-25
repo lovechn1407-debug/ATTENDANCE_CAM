@@ -1069,6 +1069,23 @@ export default function ScreeningPage() {
                 </span>
               </button>
 
+              {/* Refresh Screen Option */}
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full p-4 rounded-2xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 flex items-center justify-between transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <RefreshCw className="w-5 h-5 text-indigo-400" />
+                  <div className="text-left">
+                    <div className="text-sm font-bold">Refresh Screen &amp; Models</div>
+                    <div className="text-xs text-neutral-400">Reload application page and re-sync AI models</div>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-neutral-800 text-neutral-300">
+                  RELOAD
+                </span>
+              </button>
+
               <button
                 onClick={() => { setIsSettingsModalOpen(false); setIsLogsModalOpen(true); }}
                 className="w-full p-4 rounded-2xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 flex items-center justify-between transition-all"
