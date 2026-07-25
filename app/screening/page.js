@@ -30,7 +30,8 @@ import {
   Tv, 
   Calendar, 
   Clock,
-  Delete
+  Maximize,
+  Minimize
 } from "lucide-react";
 
 // ─── Status theme map ─────────────────────────────────────────────────────────
@@ -97,6 +98,7 @@ export default function ScreeningPage() {
   const [matchTimestamp, setMatchTimestamp] = useState("");
   const [updateProgress, setUpdateProgress] = useState(0);
   const [scanLine, setScanLine] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // ─── Screen Connection Authentication & System States ──────────────────────
   const [availableScreens, setAvailableScreens] = useState([]);
@@ -132,6 +134,27 @@ export default function ScreeningPage() {
   useEffect(() => { activeDatasetsRef.current = activeDatasets; }, [activeDatasets]);
   useEffect(() => { attendanceLogsRef.current = attendanceLogs; }, [attendanceLogs]);
   useEffect(() => { statusStateRef.current = statusState; }, [statusState]);
+
+  // Fullscreen change listener
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () => document.removeEventListener("fullscreenchange", handleFsChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.warn("Fullscreen request error:", err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
 
   // ─── Audio ────────────────────────────────────────────────────────────────
   const playStateAudio = useCallback((state) => {
@@ -498,7 +521,7 @@ export default function ScreeningPage() {
                 Enter Screen PIN
               </label>
               <div className="w-full py-3.5 bg-neutral-900 border border-neutral-700 rounded-xl text-center font-mono text-xl font-bold tracking-[0.4em] text-indigo-400">
-                {inputScreenPin ? "•".repeat(inputScreenPin.length) : <span className="text-neutral-600 text-xs font-sans font-normal tracking-normal">Touch numpad below</span>}
+                {inputScreenPin ? "•".repeat(inputScreenPin.length) : <span className="text-neutral-600 text-xs font-sans tracking-normal font-normal">Touch numpad below</span>}
               </div>
             </div>
 
@@ -518,321 +541,326 @@ export default function ScreeningPage() {
     );
   }
 
-  // ─── Override Screens ─────────────────────────────────────────────────────
-  if (screenConfig.mode !== "NORMAL") {
-    return (
-      <div className="fixed inset-0 bg-[#030303] flex flex-col font-sans text-white overflow-hidden">
-        <OverrideTopBar date={currentDate} time={currentTime} screenId={connectedScreenId} />
-        <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-8">
-          {screenConfig.mode === "UPDATING" && <UpdatingScreen progress={updateProgress} />}
-          {screenConfig.mode === "CLOSED"    && <ClosedScreen />}
-          {screenConfig.mode === "DISCONNECTED" && <DisconnectedScreen />}
-          {screenConfig.mode === "NO_CAMERA" && <NoCameraScreen />}
-          {screenConfig.mode === "MAINTENANCE" && <MaintenanceScreen adminMessage={screenConfig.adminMessage} />}
-        </div>
-        <OverrideFooter />
-      </div>
-    );
-  }
-
-  // ─── Live Scanner (Full Screen) ───────────────────────────────────────────
   return (
     <div className="fixed inset-0 bg-[#030303] flex flex-col font-sans overflow-hidden" style={{ color: "white" }}>
-
-      {/* === TOP STATUS BAR (Dark Greyish-Black Bar) === */}
-      <div className="bg-[#0c0c0e]/95 backdrop-blur-md border-b border-white/10 px-5 py-2.5 shrink-0 flex items-center justify-between z-30">
-        {/* Left: Screen ID (No overflow) */}
-        <div className="min-w-0 max-w-[60%] flex items-center gap-2 shrink">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-          <span className="text-sm sm:text-base font-black font-mono text-white tracking-wider uppercase truncate">
-            ID: {connectedScreenId || "SCREEN_01"}
-          </span>
+      {/* ─── DYNAMIC VIEW BODY (NORMAL VS OVERRIDE SCREENS) ───────────────── */}
+      {screenConfig.mode !== "NORMAL" ? (
+        <div className="flex-1 flex flex-col font-sans text-white overflow-hidden">
+          <OverrideTopBar date={currentDate} time={currentTime} screenId={connectedScreenId} />
+          <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-8">
+            {screenConfig.mode === "UPDATING" && <UpdatingScreen progress={updateProgress} />}
+            {screenConfig.mode === "CLOSED"    && <ClosedScreen />}
+            {screenConfig.mode === "DISCONNECTED" && <DisconnectedScreen />}
+            {screenConfig.mode === "NO_CAMERA" && <NoCameraScreen />}
+            {screenConfig.mode === "MAINTENANCE" && <MaintenanceScreen adminMessage={screenConfig.adminMessage} />}
+          </div>
+          <OverrideFooter />
         </div>
+      ) : (
+        <div className="flex-1 flex flex-col font-sans overflow-hidden">
+          {/* === TOP STATUS BAR (Dark Greyish-Black Bar) === */}
+          <div className="bg-[#0c0c0e]/95 backdrop-blur-md border-b border-white/10 px-5 py-2.5 shrink-0 flex items-center justify-between z-30">
+            {/* Left: Screen ID (No overflow) */}
+            <div className="min-w-0 max-w-[60%] flex items-center gap-2 shrink">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span className="text-sm sm:text-base font-black font-mono text-white tracking-wider uppercase truncate">
+                ID: {connectedScreenId || "SCREEN_01"}
+              </span>
+            </div>
 
-        {/* Right: Date on top, Time lower (No box, small text in corner) */}
-        <div className="flex flex-col items-end text-right shrink-0">
-          <span className="text-[10px] tracking-wider uppercase font-semibold text-neutral-400">
-            {currentDate}
-          </span>
-          <span className="text-xs font-mono font-bold text-indigo-400 tracking-wide">
-            {currentTime}
-          </span>
-        </div>
-      </div>
-
-      {/* === CAMERA CIRCLE SECTION === */}
-      <div className="flex-1 flex flex-col items-center justify-center relative gap-6">
-
-        {/* Ambient glow — behind circle */}
-        <div
-          className="absolute rounded-full pointer-events-none"
-          style={{
-            width: CIRCLE_SIZE + 120,
-            height: CIRCLE_SIZE + 120,
-            background: `radial-gradient(ellipse at center, ${theme.glow} 0%, transparent 70%)`,
-            transition: "background 0.6s ease",
-            willChange: "background"
-          }}
-        />
-
-        {/* Outer wrapper: positions SVG ring exactly on the circle border */}
-        <div className="relative">
-
-          {/* Corner reticle brackets */}
-          {["top-left","top-right","bottom-left","bottom-right"].map((pos) => {
-            const isTop    = pos.startsWith("top");
-            const isLeft   = pos.endsWith("left");
-            const offset   = -18;
-            const bStyle   = { position: "absolute", width: 20, height: 20, borderColor: isActive ? theme.accent : "#ffffff33", transition: "border-color 0.4s ease" };
-            return (
-              <div key={pos} style={{
-                ...bStyle,
-                top:    isTop    ? offset : "auto",
-                bottom: !isTop   ? offset : "auto",
-                left:   isLeft   ? offset : "auto",
-                right:  !isLeft  ? offset : "auto",
-                borderTopWidth:    isTop    ? 2 : 0,
-                borderBottomWidth: !isTop   ? 2 : 0,
-                borderLeftWidth:   isLeft   ? 2 : 0,
-                borderRightWidth:  !isLeft  ? 2 : 0,
-                borderTopLeftRadius:     (isTop && isLeft)   ? 4 : 0,
-                borderTopRightRadius:    (isTop && !isLeft)  ? 4 : 0,
-                borderBottomLeftRadius:  (!isTop && isLeft)  ? 4 : 0,
-                borderBottomRightRadius: (!isTop && !isLeft) ? 4 : 0,
-              }} />
-            );
-          })}
-
-          {/* Circle — video clipped with BOLD BORDER when active */}
-          <div
-            className={`rounded-full overflow-hidden bg-[#0a0a0a] relative transition-all duration-300 ${
-              isActive ? "border-[6px]" : "border-2 border-neutral-800 shadow-2xl"
-            }`}
-            style={{ 
-              width: CIRCLE_SIZE, 
-              height: CIRCLE_SIZE,
-              borderColor: isActive ? theme.accent : "#262626",
-              boxShadow: isActive ? `0 0 40px ${theme.accent}77` : "0 25px 50px -12px rgba(0, 0, 0, 0.5)"
-            }}
-          >
-            <video
-              ref={videoRef}
-              autoPlay playsInline muted
-              className="absolute inset-0 w-full h-full object-cover -scale-x-100"
-            />
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
-            />
-
-            {/* Idle scan line sweep */}
-            {!isActive && (
-              <div
-                className="absolute left-0 right-0 pointer-events-none"
-                style={{
-                  top: `${scanLine}%`,
-                  height: "2px",
-                  background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0.06) 80%, transparent 100%)",
-                  transition: "top 16ms linear"
-                }}
-              />
-            )}
-
-            {/* Active overlay vignette tint */}
-            {isActive && (
-              <div
-                className="absolute inset-0 pointer-events-none rounded-full"
-                style={{
-                  boxShadow: `inset 0 0 60px ${theme.accent}22`,
-                  transition: "box-shadow 0.4s ease"
-                }}
-              />
-            )}
+            {/* Right: Date on top, Time lower (No box, small text in corner) */}
+            <div className="flex flex-col items-end text-right shrink-0">
+              <span className="text-[10px] tracking-wider uppercase font-semibold text-neutral-400">
+                {currentDate}
+              </span>
+              <span className="text-xs font-mono font-bold text-indigo-400 tracking-wide">
+                {currentTime}
+              </span>
+            </div>
           </div>
 
-          {/* SVG Ring — outside the overflow:hidden div with BOLD stroke when active */}
-          <svg
-            className="absolute pointer-events-none"
-            style={{
-              top: -4, left: -4,
-              width: CIRCLE_SIZE + 8,
-              height: CIRCLE_SIZE + 8,
-              willChange: "transform"
-            }}
-            viewBox={`0 0 ${CIRCLE_SIZE + 8} ${CIRCLE_SIZE + 8}`}
-          >
-            {/* base dim ring always visible */}
-            <circle
-              cx={(CIRCLE_SIZE + 8) / 2}
-              cy={(CIRCLE_SIZE + 8) / 2}
-              r={CIRCLE_SIZE / 2 + 1}
-              fill="none"
-              stroke="#ffffff12"
-              strokeWidth="1.5"
+          {/* === CAMERA CIRCLE SECTION === */}
+          <div className="flex-1 flex flex-col items-center justify-center relative gap-6">
+
+            {/* Ambient glow — behind circle */}
+            <div
+              className="absolute rounded-full pointer-events-none"
+              style={{
+                width: CIRCLE_SIZE + 120,
+                height: CIRCLE_SIZE + 120,
+                background: `radial-gradient(ellipse at center, ${theme.glow} 0%, transparent 70%)`,
+                transition: "background 0.6s ease",
+                willChange: "background"
+              }}
             />
-            {/* animated status ring (bolder stroke) */}
-            <circle
-              cx={(CIRCLE_SIZE + 8) / 2}
-              cy={(CIRCLE_SIZE + 8) / 2}
-              r={CIRCLE_SIZE / 2 + 1}
-              fill="none"
-              stroke={isActive ? theme.ring : "transparent"}
-              strokeWidth={isActive ? "7" : "3"}
-              strokeLinecap="round"
-              strokeDasharray={CIRCUMFERENCE}
-              strokeDashoffset={isActive ? 0 : CIRCUMFERENCE}
-              style={{ transition: "stroke-dashoffset 0.65s cubic-bezier(0.4,0,0.2,1), stroke 0.35s ease, stroke-width 0.3s ease" }}
-              transform={`rotate(-90 ${(CIRCLE_SIZE + 8) / 2} ${(CIRCLE_SIZE + 8) / 2})`}
-            />
-          </svg>
-        </div>
 
-        {/* === FULL RECTANGLE BACKGROUND STATUS BANNER (with shimmer effect) === */}
-        <div className="w-full min-h-[52px] flex items-center shrink-0 mt-4">
-          <AnimatePresence mode="wait">
-            {isActive ? (
-              <motion.div
-                key={statusState}
-                initial={{ y: 12, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -8, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                style={{ backgroundColor: theme.barBg }}
-                className="w-full py-3.5 px-4 text-white font-extrabold text-sm sm:text-base tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg"
+            {/* Outer wrapper: positions SVG ring exactly on the circle border */}
+            <div className="relative">
+
+              {/* Corner reticle brackets */}
+              {["top-left","top-right","bottom-left","bottom-right"].map((pos) => {
+                const isTop    = pos.startsWith("top");
+                const isLeft   = pos.endsWith("left");
+                const offset   = -18;
+                const bStyle   = { position: "absolute", width: 20, height: 20, borderColor: isActive ? theme.accent : "#ffffff33", transition: "border-color 0.4s ease" };
+                return (
+                  <div key={pos} style={{
+                    ...bStyle,
+                    top:    isTop    ? offset : "auto",
+                    bottom: !isTop   ? offset : "auto",
+                    left:   isLeft   ? offset : "auto",
+                    right:  !isLeft  ? offset : "auto",
+                    borderTopWidth:    isTop    ? 2 : 0,
+                    borderBottomWidth: !isTop   ? 2 : 0,
+                    borderLeftWidth:   isLeft   ? 2 : 0,
+                    borderRightWidth:  !isLeft  ? 2 : 0,
+                    borderTopLeftRadius:     (isTop && isLeft)   ? 4 : 0,
+                    borderTopRightRadius:    (isTop && !isLeft)  ? 4 : 0,
+                    borderBottomLeftRadius:  (!isTop && isLeft)  ? 4 : 0,
+                    borderBottomRightRadius: (!isTop && !isLeft) ? 4 : 0,
+                  }} />
+                );
+              })}
+
+              {/* Circle — video clipped with BOLD BORDER when active */}
+              <div
+                className={`rounded-full overflow-hidden bg-[#0a0a0a] relative transition-all duration-300 ${
+                  isActive ? "border-[6px]" : "border-2 border-neutral-800 shadow-2xl"
+                }`}
+                style={{ 
+                  width: CIRCLE_SIZE, 
+                  height: CIRCLE_SIZE,
+                  borderColor: isActive ? theme.accent : "#262626",
+                  boxShadow: isActive ? `0 0 40px ${theme.accent}77` : "0 25px 50px -12px rgba(0, 0, 0, 0.5)"
+                }}
               >
-                {StatusIcon && <StatusIcon className="w-5 h-5 text-white shrink-0" />}
-                <span
-                  className="t-shimmer text-white font-black tracking-widest uppercase text-center"
-                  data-text={theme.label}
-                  style={{
-                    "--shimmer-base": "rgba(255,255,255,0.85)",
-                    "--shimmer-highlight": "#ffffff",
-                    "--shimmer-dur": "1800ms"
-                  }}
-                >
-                  {theme.label}
-                </span>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="idle"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="w-full flex flex-col items-center justify-center gap-1 py-2"
-              >
-                <span className="text-[10px] tracking-[0.35em] uppercase text-neutral-700 font-semibold">
-                  LOOK INTO CAMERA
-                </span>
-                <div className="flex gap-1.5 mt-1">
-                  {[0,1,2].map((i) => (
-                    <div
-                      key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-neutral-700"
-                      style={{ animation: `pulse 1.4s ease-in-out ${i * 0.22}s infinite` }}
-                    />
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                <video
+                  ref={videoRef}
+                  autoPlay playsInline muted
+                  className="absolute inset-0 w-full h-full object-cover -scale-x-100"
+                />
+                <canvas
+                  ref={canvasRef}
+                  className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
+                />
 
-      </div>
-
-      {/* === BOTTOM INFO PANEL === */}
-      <div className="shrink-0 pb-6 pt-2 px-5" style={{ minHeight: 210 }}>
-        <AnimatePresence mode="wait">
-          {isActive && activeMatch ? (
-            <motion.div
-              key={`card-${activeMatch.studentId}`}
-              initial={{ opacity: 0, y: 24, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.98 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              style={{ willChange: "transform, opacity" }}
-              className="bg-[#121212] border border-neutral-800 p-5 rounded-2xl shadow-2xl space-y-4 relative overflow-hidden"
-            >
-              {/* Subtle accent glow line at top edge */}
-              <div 
-                className="absolute top-0 left-0 right-0 h-[2px]"
-                style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}, transparent)` }}
-              />
-
-              {/* Student info row */}
-              <div className="flex items-center gap-4">
-                {/* Avatar */}
-                {activeMatch.photoUrl ? (
-                  <img
-                    src={activeMatch.photoUrl}
-                    alt={activeMatch.name}
-                    className="w-20 h-20 rounded-2xl object-cover shadow-2xl bg-neutral-900 border border-white/20 ring-2 ring-indigo-500/30"
-                  />
-                ) : (
+                {/* Idle scan line sweep */}
+                {!isActive && (
                   <div
-                    className="w-20 h-20 rounded-2xl flex items-center justify-center font-black text-3xl text-white shadow-2xl border border-white/20"
-                    style={{ background: `linear-gradient(135deg, ${theme.accent}33, #1e1e1e)` }}
-                  >
-                    {activeMatch.name?.charAt(0).toUpperCase()}
-                  </div>
+                    className="absolute left-0 right-0 pointer-events-none"
+                    style={{
+                      top: `${scanLine}%`,
+                      height: "2px",
+                      background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0.06) 80%, transparent 100%)",
+                      transition: "top 16ms linear"
+                    }}
+                  />
                 )}
 
-                {/* Name + ID Badge */}
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-white/10 border border-white/10 text-[11px] font-mono font-bold text-neutral-300">
-                    <span>STU_ID:</span>
-                    <span className="text-white">{activeMatch.studentId}</span>
-                  </div>
-                  <div className="text-2xl font-black text-white leading-tight tracking-tight truncate">
-                    {activeMatch.name}
-                  </div>
-                </div>
-              </div>
-
-              {/* Class & Group Side-by-Side Vibrant Orange Pills */}
-              <div className="flex gap-3">
-                <div className="flex-1 bg-[#FF8F00] text-black font-black text-xs py-2.5 px-3 rounded-xl text-center uppercase tracking-wider shadow-md border border-amber-300/30">
-                  {activeMatch.class} - {activeMatch.section}
-                </div>
-                <div className="flex-1 bg-[#FF6F00] text-black font-black text-xs py-2.5 px-3 rounded-xl text-center uppercase tracking-wider shadow-md border border-orange-400/30">
-                  GROUP {activeMatch.group}
-                </div>
-              </div>
-
-              {/* Full Width Purple Timestamp Button */}
-              <div className="w-full bg-[#536DFE] text-white font-black text-sm py-2.5 rounded-xl text-center tracking-wider shadow-lg uppercase border border-indigo-400/30 flex items-center justify-center gap-2">
-                <span>[{matchTimestamp}]</span>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="idle"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="flex flex-col items-center justify-center gap-3"
-              style={{ minHeight: 160 }}
-            >
-              <div className="text-[10px] uppercase tracking-[0.35em] text-neutral-700 font-semibold">
-                LOOK INTO CAMERA
-              </div>
-              <div className="flex gap-1.5">
-                {[0,1,2].map((i) => (
+                {/* Active overlay vignette tint */}
+                {isActive && (
                   <div
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-neutral-700"
-                    style={{ animation: `pulse 1.4s ease-in-out ${i * 0.22}s infinite` }}
+                    className="absolute inset-0 pointer-events-none rounded-full"
+                    style={{
+                      boxShadow: `inset 0 0 60px ${theme.accent}22`,
+                      transition: "box-shadow 0.4s ease"
+                    }}
                   />
-                ))}
+                )}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
 
-      {/* Settings Gear Button at Bottom Right Corner */}
+              {/* SVG Ring — outside the overflow:hidden div with BOLD stroke when active */}
+              <svg
+                className="absolute pointer-events-none"
+                style={{
+                  top: -4, left: -4,
+                  width: CIRCLE_SIZE + 8,
+                  height: CIRCLE_SIZE + 8,
+                  willChange: "transform"
+                }}
+                viewBox={`0 0 ${CIRCLE_SIZE + 8} ${CIRCLE_SIZE + 8}`}
+              >
+                {/* base dim ring always visible */}
+                <circle
+                  cx={(CIRCLE_SIZE + 8) / 2}
+                  cy={(CIRCLE_SIZE + 8) / 2}
+                  r={CIRCLE_SIZE / 2 + 1}
+                  fill="none"
+                  stroke="#ffffff12"
+                  strokeWidth="1.5"
+                />
+                {/* animated status ring (bolder stroke) */}
+                <circle
+                  cx={(CIRCLE_SIZE + 8) / 2}
+                  cy={(CIRCLE_SIZE + 8) / 2}
+                  r={CIRCLE_SIZE / 2 + 1}
+                  fill="none"
+                  stroke={isActive ? theme.ring : "transparent"}
+                  strokeWidth={isActive ? "7" : "3"}
+                  strokeLinecap="round"
+                  strokeDasharray={CIRCUMFERENCE}
+                  strokeDashoffset={isActive ? 0 : CIRCUMFERENCE}
+                  style={{ transition: "stroke-dashoffset 0.65s cubic-bezier(0.4,0,0.2,1), stroke 0.35s ease, stroke-width 0.3s ease" }}
+                  transform={`rotate(-90 ${(CIRCLE_SIZE + 8) / 2} ${(CIRCLE_SIZE + 8) / 2})`}
+                />
+              </svg>
+            </div>
+
+            {/* === FULL RECTANGLE BACKGROUND STATUS BANNER (with shimmer effect) === */}
+            <div className="w-full min-h-[52px] flex items-center shrink-0 mt-4">
+              <AnimatePresence mode="wait">
+                {isActive ? (
+                  <motion.div
+                    key={statusState}
+                    initial={{ y: 12, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -8, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    style={{ backgroundColor: theme.barBg }}
+                    className="w-full py-3.5 px-4 text-white font-extrabold text-sm sm:text-base tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    {StatusIcon && <StatusIcon className="w-5 h-5 text-white shrink-0" />}
+                    <span
+                      className="t-shimmer text-white font-black tracking-widest uppercase text-center"
+                      data-text={theme.label}
+                      style={{
+                        "--shimmer-base": "rgba(255,255,255,0.85)",
+                        "--shimmer-highlight": "#ffffff",
+                        "--shimmer-dur": "1800ms"
+                      }}
+                    >
+                      {theme.label}
+                    </span>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="idle"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="w-full flex flex-col items-center justify-center gap-1 py-2"
+                  >
+                    <span className="text-[10px] tracking-[0.35em] uppercase text-neutral-700 font-semibold">
+                      LOOK INTO CAMERA
+                    </span>
+                    <div className="flex gap-1.5 mt-1">
+                      {[0,1,2].map((i) => (
+                        <div
+                          key={i}
+                          className="w-1.5 h-1.5 rounded-full bg-neutral-700"
+                          style={{ animation: `pulse 1.4s ease-in-out ${i * 0.22}s infinite` }}
+                        />
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+          </div>
+
+          {/* === BOTTOM INFO PANEL === */}
+          <div className="shrink-0 pb-6 pt-2 px-5" style={{ minHeight: 210 }}>
+            <AnimatePresence mode="wait">
+              {isActive && activeMatch ? (
+                <motion.div
+                  key={`card-${activeMatch.studentId}`}
+                  initial={{ opacity: 0, y: 24, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  style={{ willChange: "transform, opacity" }}
+                  className="bg-[#121212] border border-neutral-800 p-5 rounded-2xl shadow-2xl space-y-4 relative overflow-hidden"
+                >
+                  {/* Subtle accent glow line at top edge */}
+                  <div 
+                    className="absolute top-0 left-0 right-0 h-[2px]"
+                    style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}, transparent)` }}
+                  />
+
+                  {/* Student info row */}
+                  <div className="flex items-center gap-4">
+                    {/* Avatar */}
+                    {activeMatch.photoUrl ? (
+                      <img
+                        src={activeMatch.photoUrl}
+                        alt={activeMatch.name}
+                        className="w-20 h-20 rounded-2xl object-cover shadow-2xl bg-neutral-900 border border-white/20 ring-2 ring-indigo-500/30"
+                      />
+                    ) : (
+                      <div
+                        className="w-20 h-20 rounded-2xl flex items-center justify-center font-black text-3xl text-white shadow-2xl border border-white/20"
+                        style={{ background: `linear-gradient(135deg, ${theme.accent}33, #1e1e1e)` }}
+                      >
+                        {activeMatch.name?.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+
+                    {/* Name + ID Badge */}
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-white/10 border border-white/10 text-[11px] font-mono font-bold text-neutral-300">
+                        <span>STU_ID:</span>
+                        <span className="text-white">{activeMatch.studentId}</span>
+                      </div>
+                      <div className="text-2xl font-black text-white leading-tight tracking-tight truncate">
+                        {activeMatch.name}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Class & Group Side-by-Side Vibrant Orange Pills */}
+                  <div className="flex gap-3">
+                    <div className="flex-1 bg-[#FF8F00] text-black font-black text-xs py-2.5 px-3 rounded-xl text-center uppercase tracking-wider shadow-md border border-amber-300/30">
+                      {activeMatch.class} - {activeMatch.section}
+                    </div>
+                    <div className="flex-1 bg-[#FF6F00] text-black font-black text-xs py-2.5 px-3 rounded-xl text-center uppercase tracking-wider shadow-md border border-orange-400/30">
+                      GROUP {activeMatch.group}
+                    </div>
+                  </div>
+
+                  {/* Full Width Purple Timestamp Button */}
+                  <div className="w-full bg-[#536DFE] text-white font-black text-sm py-2.5 rounded-xl text-center tracking-wider shadow-lg uppercase border border-indigo-400/30 flex items-center justify-center gap-2">
+                    <span>[{matchTimestamp}]</span>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="idle"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex flex-col items-center justify-center gap-3"
+                  style={{ minHeight: 160 }}
+                >
+                  <div className="text-[10px] uppercase tracking-[0.35em] text-neutral-700 font-semibold">
+                    LOOK INTO CAMERA
+                  </div>
+                  <div className="flex gap-1.5">
+                    {[0,1,2].map((i) => (
+                      <div
+                        key={i}
+                        className="w-1.5 h-1.5 rounded-full bg-neutral-700"
+                        style={{ animation: `pulse 1.4s ease-in-out ${i * 0.22}s infinite` }}
+                      />
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Footer */}
+          <div className="shrink-0 pb-4 text-center">
+            <span className="text-[9px] tracking-[0.3em] text-neutral-800 uppercase font-mono">
+              BIOMETRIC ATTENDANCE · V 1.2.7
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ─── ALWAYS-VISIBLE FLOATING SETTINGS GEAR BUTTON (BOTTOM RIGHT) ───── */}
       <button
         onClick={() => setIsPinPromptOpen(true)}
         className="fixed bottom-4 right-4 z-40 p-3.5 rounded-2xl bg-[#18181b]/95 border border-white/20 text-neutral-300 hover:text-white shadow-2xl hover:scale-105 active:scale-95 transition-all"
@@ -840,13 +868,6 @@ export default function ScreeningPage() {
       >
         <Settings className="w-5 h-5 text-indigo-400" />
       </button>
-
-      {/* Footer */}
-      <div className="shrink-0 pb-4 text-center">
-        <span className="text-[9px] tracking-[0.3em] text-neutral-800 uppercase font-mono">
-          BIOMETRIC ATTENDANCE · V 1.2.7
-        </span>
-      </div>
 
       {/* ─── MODAL 1: SETTINGS PIN PROMPT OVERLAY (On-Screen Touch Numpad) ──── */}
       {isPinPromptOpen && (
@@ -904,6 +925,29 @@ export default function ScreeningPage() {
             </div>
 
             <div className="space-y-3">
+              {/* Toggle Fullscreen Mode Option */}
+              <button
+                onClick={toggleFullscreen}
+                className="w-full p-4 rounded-2xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 flex items-center justify-between transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  {isFullscreen ? (
+                    <Minimize className="w-5 h-5 text-indigo-400" />
+                  ) : (
+                    <Maximize className="w-5 h-5 text-indigo-400" />
+                  )}
+                  <div className="text-left">
+                    <div className="text-sm font-bold">Toggle Fullscreen Mode</div>
+                    <div className="text-xs text-neutral-400">
+                      {isFullscreen ? "Fullscreen active (Click to exit)" : "Hide browser address bar & fill display"}
+                    </div>
+                  </div>
+                </div>
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${isFullscreen ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40" : "bg-neutral-800 text-neutral-400"}`}>
+                  {isFullscreen ? "ON" : "OFF"}
+                </span>
+              </button>
+
               <button
                 onClick={() => { setIsSettingsModalOpen(false); setIsLogsModalOpen(true); }}
                 className="w-full p-4 rounded-2xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 flex items-center justify-between transition-all"
