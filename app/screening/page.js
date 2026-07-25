@@ -304,7 +304,7 @@ export default function ScreeningPage() {
       </div>
 
       {/* === CAMERA CIRCLE SECTION === */}
-      <div className="flex-1 flex items-center justify-center relative">
+      <div className="flex-1 flex flex-col items-center justify-center relative gap-6">
 
         {/* Ambient glow — behind circle */}
         <div
@@ -321,25 +321,6 @@ export default function ScreeningPage() {
         {/* Outer wrapper: positions SVG ring exactly on the circle border */}
         <div className="relative">
 
-          {/* Floating status badge — appears above circle when active */}
-          <AnimatePresence>
-            {isActive && StatusIcon && (
-              <motion.div
-                key="badge"
-                initial={{ y: 10, opacity: 0, scale: 0.6 }}
-                animate={{ y: -24, opacity: 1, scale: 1 }}
-                exit={{ y: 6, opacity: 0, scale: 0.6 }}
-                transition={{ type: "spring", stiffness: 480, damping: 28 }}
-                style={{ backgroundColor: theme.accent, willChange: "transform, opacity" }}
-                className="absolute top-0 left-1/2 -translate-x-1/2 z-30 px-4 py-1.5 rounded-full flex items-center gap-2 shadow-2xl"
-              >
-                <StatusIcon className="w-4 h-4 text-white" />
-                <span className="text-white text-[11px] font-black tracking-widest uppercase t-shimmer" data-text={theme.label}>
-                  {theme.label}
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* Corner reticle brackets */}
           {["top-left","top-right","bottom-left","bottom-right"].map((pos) => {
@@ -442,6 +423,66 @@ export default function ScreeningPage() {
             />
           </svg>
         </div>
+
+        {/* === STATUS TEXT BELOW CIRCLE (shimmer effect) === */}
+        <AnimatePresence mode="wait">
+          {isActive ? (
+            <motion.div
+              key={statusState}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="flex flex-col items-center gap-2"
+              style={{ willChange: "transform, opacity" }}
+            >
+              {/* Icon row */}
+              {StatusIcon && (
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: `${theme.accent}22`, border: `1px solid ${theme.accent}55` }}
+                >
+                  <StatusIcon style={{ color: theme.accent }} className="w-4 h-4" />
+                </div>
+              )}
+              {/* Big shimmer label */}
+              <span
+                className="t-shimmer text-[18px] font-black uppercase tracking-[0.2em] text-center leading-none"
+                data-text={theme.label}
+                style={{
+                  "--shimmer-base": `${theme.accent}bb`,
+                  "--shimmer-highlight": "#ffffff",
+                  "--shimmer-dur": "1600ms",
+                }}
+              >
+                {theme.label}
+              </span>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="idle"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex flex-col items-center gap-1"
+            >
+              <span className="text-[10px] tracking-[0.35em] uppercase text-neutral-700 font-semibold">
+                LOOK INTO CAMERA
+              </span>
+              <div className="flex gap-1.5 mt-1">
+                {[0,1,2].map((i) => (
+                  <div
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-neutral-700"
+                    style={{ animation: `pulse 1.4s ease-in-out ${i * 0.22}s infinite` }}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
       </div>
 
       {/* === BOTTOM INFO PANEL === */}
@@ -518,7 +559,7 @@ export default function ScreeningPage() {
             </motion.div>
           ) : (
             <motion.div
-              key="idle-hint"
+              key="idle"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
