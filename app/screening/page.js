@@ -277,28 +277,10 @@ export default function ScreeningPage() {
           <span className="text-[10px] tracking-[0.25em] uppercase font-semibold text-neutral-500">BIOMETRIC SYSTEM</span>
           <span className="text-xs font-semibold text-neutral-400 tracking-wide">{currentDate}</span>
         </div>
-        {/* Status pill */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={statusState}
-            initial={{ opacity: 0, scale: 0.88 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.88 }}
-            transition={{ duration: 0.18 }}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border"
-            style={{
-              backgroundColor: isActive ? `${theme.barColor}33` : "#ffffff08",
-              borderColor: isActive ? theme.accent : "#ffffff15",
-              color: isActive ? theme.accent : "#ffffff55"
-            }}
-          >
-            <span
-              className="w-1.5 h-1.5 rounded-full"
-              style={{ backgroundColor: isActive ? theme.accent : "#ffffff44" }}
-            />
-            {isActive ? theme.label : "SCANNING"}
-          </motion.div>
-        </AnimatePresence>
+        {/* Center Title */}
+        <div className="text-center">
+          <div className="text-[10px] tracking-[0.25em] uppercase font-bold text-neutral-400">ATTENDANCE SCANNER</div>
+        </div>
         {/* Clock */}
         <div className="flex flex-col items-end">
           <span className="text-[10px] tracking-[0.2em] uppercase font-semibold text-neutral-500">LOCAL TIME</span>
@@ -482,75 +464,67 @@ export default function ScreeningPage() {
       </div>
 
       {/* === BOTTOM INFO PANEL === */}
-      <div className="shrink-0 pb-6 pt-2 px-5" style={{ minHeight: 200 }}>
+      <div className="shrink-0 pb-6 pt-2 px-5" style={{ minHeight: 210 }}>
         <AnimatePresence mode="wait">
           {isActive && activeMatch ? (
             <motion.div
               key={`card-${activeMatch.studentId}`}
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.98 }}
               transition={{ duration: 0.25, ease: "easeOut" }}
               style={{ willChange: "transform, opacity" }}
+              className="bg-[#121212] border border-neutral-800 p-5 rounded-2xl shadow-2xl space-y-4 relative overflow-hidden"
             >
-              {/* Thin accent divider */}
-              <div
-                className="h-[2px] rounded-full mb-5"
+              {/* Subtle accent glow line at top edge */}
+              <div 
+                className="absolute top-0 left-0 right-0 h-[2px]"
                 style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}, transparent)` }}
               />
 
               {/* Student info row */}
-              <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center gap-4">
                 {/* Avatar */}
                 {activeMatch.photoUrl ? (
                   <img
                     src={activeMatch.photoUrl}
                     alt={activeMatch.name}
-                    className="w-[68px] h-[68px] rounded-2xl object-cover shadow-xl"
-                    style={{ border: `2px solid ${theme.accent}55` }}
+                    className="w-20 h-20 rounded-2xl object-cover shadow-2xl bg-neutral-900 border border-white/20 ring-2 ring-indigo-500/30"
                   />
                 ) : (
                   <div
-                    className="w-[68px] h-[68px] rounded-2xl flex items-center justify-center font-black text-2xl text-white shadow-xl"
-                    style={{ background: `${theme.accent}22`, border: `2px solid ${theme.accent}44` }}
+                    className="w-20 h-20 rounded-2xl flex items-center justify-center font-black text-3xl text-white shadow-2xl border border-white/20"
+                    style={{ background: `linear-gradient(135deg, ${theme.accent}33, #1e1e1e)` }}
                   >
                     {activeMatch.name?.charAt(0).toUpperCase()}
                   </div>
                 )}
 
-                {/* Name + ID */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-[10px] tracking-[0.2em] uppercase font-semibold text-neutral-500 mb-0.5">
-                    ID · {activeMatch.studentId}
+                {/* Name + ID Badge */}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-white/10 border border-white/10 text-[11px] font-mono font-bold text-neutral-300">
+                    <span>STU_ID:</span>
+                    <span className="text-white">{activeMatch.studentId}</span>
                   </div>
-                  <div className="text-[22px] font-black text-white leading-none tracking-tight truncate">
+                  <div className="text-2xl font-black text-white leading-tight tracking-tight truncate">
                     {activeMatch.name}
                   </div>
                 </div>
               </div>
 
-              {/* Pills row */}
-              <div className="flex gap-2 mb-3">
-                <div
-                  className="flex-1 py-2 px-3 rounded-xl text-center text-[11px] font-black uppercase tracking-widest"
-                  style={{ backgroundColor: "#FF8F0018", border: "1px solid #FF8F0055", color: "#FF8F00" }}
-                >
-                  {activeMatch.class} · {activeMatch.section}
+              {/* Class & Group Side-by-Side Vibrant Orange Pills */}
+              <div className="flex gap-3">
+                <div className="flex-1 bg-[#FF8F00] text-black font-black text-xs py-2.5 px-3 rounded-xl text-center uppercase tracking-wider shadow-md border border-amber-300/30">
+                  {activeMatch.class} - {activeMatch.section}
                 </div>
-                <div
-                  className="flex-1 py-2 px-3 rounded-xl text-center text-[11px] font-black uppercase tracking-widest"
-                  style={{ backgroundColor: "#FF6F0018", border: "1px solid #FF6F0055", color: "#FF6F00" }}
-                >
+                <div className="flex-1 bg-[#FF6F00] text-black font-black text-xs py-2.5 px-3 rounded-xl text-center uppercase tracking-wider shadow-md border border-orange-400/30">
                   GROUP {activeMatch.group}
                 </div>
               </div>
 
-              {/* Timestamp */}
-              <div
-                className="w-full py-2.5 rounded-xl text-center text-[12px] font-black uppercase tracking-widest"
-                style={{ backgroundColor: `${theme.accent}15`, border: `1px solid ${theme.accent}40`, color: theme.accent }}
-              >
-                ⏱ {matchTimestamp}
+              {/* Full Width Purple Timestamp Button */}
+              <div className="w-full bg-[#536DFE] text-white font-black text-sm py-2.5 rounded-xl text-center tracking-wider shadow-lg uppercase border border-indigo-400/30 flex items-center justify-center gap-2">
+                <span>[{matchTimestamp}]</span>
               </div>
             </motion.div>
           ) : (
