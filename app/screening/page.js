@@ -164,76 +164,97 @@ export default function ScreeningPage() {
   // ─── Detection loop ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!isModelsLoaded || screenConfig.mode !== "NORMAL") return;
+
     let processing = false;
+
     const loop = async () => {
       const video = videoRef.current;
-      const now = Date.now();
-
-      // Throttle detection loop to run every 120ms
-      if (now - lastProcessedTimeRef.current < 120) {
-        animationFrameRef.current = requestAnimationFrame(loop);
-        return;
-      }
-
       if (video && video.readyState === 4 && !processing) {
         processing = true;
-        lastProcessedTimeRef.current = now;
         try {
           const detections = await detectFacesInVideo(video);
           if (canvasRef.current) drawEyeAndLandmarkMesh(canvasRef.current, video, detections);
-          
+          const now = Date.now();
+
           if (detections.length > 0) {
             lastFaceSeenRef.current = now;
             const det = detections[0];
             const liveDesc = Array.from(det.descriptor);
             const threshold = parseFloat(localStorage.getItem("face_match_threshold") || "0.48");
             const match = findBestMatch(liveDesc, studentsRef.current, threshold);
+
             if (match?.student) {
               const student = match.student;
               const studentId = student.studentId || student.id;
-              if (currentPersonIdRef.current === studentId) { processing = false; animationFrameRef.current = requestAnimationFrame(loop); return; }
-              currentPersonIdRef.current = studentId;
-              const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-              setMatchTimestamp(ts);
-              if (student.suspended || student.isSuspended) {
-                setStatusState("SUSPENDED"); setActiveMatch(student); playStateAudio("SUSPENDED");
-              } else {
-                const ds = activeDatasetsRef.current;
-                const matched = ds.length > 0 ? ds.find((d) => {
-                  if (d.studentIds && d.studentIds.length > 0) {
-                    return d.studentIds.includes(student.studentId || student.id);
-                  }
-                  const okC = d.classes?.length ? d.classes.includes(student.class) : true;
-                  const okS = d.sections?.length ? d.sections.includes(student.section) : true;
-                  const okG = d.groups?.length ? d.groups.includes(student.group) : true;
-                  return okC && okS && okG;
-                }) : null;
-                if (!matched) {
-                  setStatusState("NOT_IN_SET"); setActiveMatch(student); playStateAudio("NOT_IN_SET");
+
+              if (currentPersonIdRef.current !== studentId) {
+                currentPersonIdRef.current = studentId;
+                const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                setMatchTimestamp(ts);
+
+                if (student.suspended || student.isSuspended) {
+                  setStatusState("SUSPENDED"); 
+                  setActiveMatch(student); 
+                  playStateAudio("SUSPENDED");
                 } else {
-                  const today = new Date().toISOString().split("T")[0];
-                  const already = attendanceLogsRef.current.find((l) => (l.studentId === studentId || l.studentId === student.id) && l.date === today);
-                  if (already) {
-                    setStatusState("ATTENDANCE_ALREADY_MARKED"); setActiveMatch(student);
-                    if (already.formattedTime) setMatchTimestamp(already.formattedTime);
-                    playStateAudio("ATTENDANCE_ALREADY_MARKED");
-                  } else {
-                    let late = false;
-                    if (matched.timing?.maxEntryTime) {
-                      const [ch, cm] = matched.timing.maxEntryTime.split(":").map(Number);
-                      const d = new Date();
-                      late = d.getHours() > ch || (d.getHours() === ch && d.getMinutes() > cm);
+                  const ds = activeDatasetsRef.current;
+                  const matched = ds.length > 0 ? ds.find((d) => {
+                    if (d.studentIds && d.studentIds.length > 0) {
+                      return d.studentIds.includes(student.studentId || student.id);
                     }
-                    if (late) {
-                      setStatusState("TIME_EXCEEDED"); setActiveMatch(student); playStateAudio("TIME_EXCEEDED");
+                    const okC = d.classes?.length ? d.classes.includes(student.class) : true;
+                    const okS = d.sections?.length ? d.sections.includes(student.section) : true;
+                    const okG = d.groups?.length ? d.groups.includes(student.group) : true;
+                    return okC && okS && okG;
+                  }) : null;
+
+                  if (!matched) {
+                    setStatusState("NOT_IN_SET"); 
+                    setActiveMatch(student); 
+                    playStateAudio("NOT_IN_SET");
+                  } else {
+                    const today = new Date().toISOString().split("T")[0];
+                    const already = attendanceLogsRef.current.find(
+                      (l) => (l.studentId === studentId || l.studentId === student.id) && l.date === today
+                    );
+
+                    if (already) {
+                      setStatusState("ATTENDANCE_ALREADY_MARKED"); 
+                      setActiveMatch(student);
+                      if (already.formattedTime) setMatchTimestamp(already.formattedTime);
+                      playStateAudio("ATTENDANCE_ALREADY_MARKED");
                     } else {
-                      setStatusState("ATTENDANCE_MARKED"); setActiveMatch(student); playStateAudio("ATTENDANCE_MARKED");
-                      recordAttendance({ studentId, name: student.name, class: student.class, section: student.section, group: student.group, datasetName: matched.name || "Master List", type: "ENTRY", timestamp: new Date().toISOString() }).catch(console.error);
+                      let late = false;
+                      if (matched.timing?.maxEntryTime) {
+                        const [ch, cm] = matched.timing.maxEntryTime.split(":").map(Number);
+                        const d = new Date();
+                        late = d.getHours() > ch || (d.getHours() === ch && d.getMinutes() > cm);
+                      }
+                      if (late) {
+                        setStatusState("TIME_EXCEEDED"); 
+                        setActiveMatch(student); 
+                        playStateAudio("TIME_EXCEEDED");
+                      } else {
+                        setStatusState("ATTENDANCE_MARKED"); 
+                        setActiveMatch(student); 
+                        playStateAudio("ATTENDANCE_MARKED");
+                        recordAttendance({ 
+                          studentId, 
+                          name: student.name, 
+                          class: student.class, 
+                          section: student.section, 
+                          group: student.group, 
+                          datasetName: matched.name || "Master List", 
+                          type: "ENTRY", 
+                          timestamp: new Date().toISOString() 
+                        }).catch(console.error);
+                      }
                     }
                   }
                 }
               }
             } else {
+              // Face detected in camera, but person is NOT registered in master database
               if (currentPersonIdRef.current !== "UNKNOWN") {
                 currentPersonIdRef.current = "UNKNOWN";
                 setStatusState("FAILED_TO_RECOGNISE");
@@ -242,6 +263,7 @@ export default function ScreeningPage() {
               }
             }
           } else {
+            // No face detected — reset to IDLE after 1 second
             if (now - lastFaceSeenRef.current > 1000 && (currentPersonIdRef.current !== null || statusStateRef.current !== "IDLE")) {
               currentPersonIdRef.current = null;
               setStatusState("IDLE");
