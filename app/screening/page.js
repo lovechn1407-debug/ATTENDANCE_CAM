@@ -224,8 +224,14 @@ export default function ScreeningPage() {
                   }
                 }
               }
-            } else if (det.detection.score < 0.4 && statusStateRef.current === "IDLE") {
-              setStatusState("FAILED_TO_RECOGNISE"); setActiveMatch(null); playStateAudio("FAILED_TO_RECOGNISE");
+            } else {
+              // Face detected in camera, but person is NOT in master database
+              if (currentPersonIdRef.current !== "UNKNOWN") {
+                currentPersonIdRef.current = "UNKNOWN";
+                setStatusState("FAILED_TO_RECOGNISE");
+                setActiveMatch(null);
+                playStateAudio("FAILED_TO_RECOGNISE");
+              }
             }
           } else {
             if (now - lastFaceSeenRef.current > 1000 && (currentPersonIdRef.current !== null || statusStateRef.current !== "IDLE")) {
