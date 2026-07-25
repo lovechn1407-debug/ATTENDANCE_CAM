@@ -540,22 +540,23 @@ export default function ScreeningPage() {
     <div className="fixed inset-0 bg-[#030303] flex flex-col font-sans overflow-hidden" style={{ color: "white" }}>
 
       {/* === TOP STATUS BAR (Dark Greyish-Black Bar) === */}
-      <div className="bg-[#121215]/95 backdrop-blur-md border-b border-white/10 px-6 py-3 shrink-0 flex items-center justify-between z-30 shadow-md">
-        {/* Left: Screen ID (Slightly big, bold, green pulse) */}
-        <div className="flex items-center gap-2.5">
+      <div className="bg-[#0c0c0e]/95 backdrop-blur-md border-b border-white/10 px-5 py-2.5 shrink-0 flex items-center justify-between z-30">
+        {/* Left: Screen ID (No overflow) */}
+        <div className="min-w-0 max-w-[60%] flex items-center gap-2 shrink">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-          <span className="text-base sm:text-lg font-black font-mono text-white tracking-wider uppercase">
+          <span className="text-sm sm:text-base font-black font-mono text-white tracking-wider uppercase truncate">
             ID: {connectedScreenId || "SCREEN_01"}
           </span>
         </div>
 
-        {/* Right: Merged Date & Time together */}
-        <div className="flex items-center gap-2 text-xs sm:text-sm font-mono font-bold text-neutral-200 bg-white/5 px-3.5 py-1.5 rounded-xl border border-white/10 shrink-0 whitespace-nowrap shadow-inner">
-          <Calendar className="w-3.5 h-3.5 text-neutral-400" />
-          <span>{currentDate}</span>
-          <span className="text-neutral-500 font-normal">|</span>
-          <Clock className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="text-indigo-400">{currentTime}</span>
+        {/* Right: Date on top, Time lower (No box, small text in corner) */}
+        <div className="flex flex-col items-end text-right shrink-0">
+          <span className="text-[10px] tracking-wider uppercase font-semibold text-neutral-400">
+            {currentDate}
+          </span>
+          <span className="text-xs font-mono font-bold text-indigo-400 tracking-wide">
+            {currentTime}
+          </span>
         </div>
       </div>
 
@@ -978,9 +979,17 @@ export default function ScreeningPage() {
 
 function OverrideTopBar({ date, time, screenId }) {
   return (
-    <div className="bg-[#121215]/95 border-b border-white/10 px-6 py-3 shrink-0 flex items-center justify-between">
-      <span className="text-sm font-mono font-bold text-white uppercase">ID: {screenId || "SCREEN_01"}</span>
-      <span className="text-xs font-mono text-neutral-400">{date} · {time}</span>
+    <div className="bg-[#0c0c0e]/95 border-b border-white/10 px-5 py-2.5 shrink-0 flex items-center justify-between">
+      <div className="min-w-0 max-w-[60%] flex items-center gap-2 shrink">
+        <span className="w-2.5 h-2.5 rounded-full bg-[#FF6D00] shrink-0 animate-pulse" />
+        <span className="text-sm sm:text-base font-black font-mono text-white tracking-wider uppercase truncate">
+          ID: {screenId || "SCREEN_01"}
+        </span>
+      </div>
+      <div className="flex flex-col items-end text-right shrink-0">
+        <span className="text-[10px] tracking-wider uppercase font-semibold text-neutral-400">{date}</span>
+        <span className="text-xs font-mono font-bold text-indigo-400">{time}</span>
+      </div>
     </div>
   );
 }
