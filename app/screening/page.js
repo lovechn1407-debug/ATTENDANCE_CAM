@@ -100,6 +100,10 @@ export default function ScreeningPage() {
   const [scanLine, setScanLine] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Connection & Hardware Hardware States
+  const [isOnline, setIsOnline] = useState(true);
+  const [hasCameraError, setHasCameraError] = useState(false);
+
   // ─── Screen Connection Authentication & System States ──────────────────────
   const [availableScreens, setAvailableScreens] = useState([]);
   const [connectedScreenId, setConnectedScreenId] = useState("");
@@ -136,10 +140,32 @@ export default function ScreeningPage() {
   useEffect(() => { attendanceLogsRef.current = attendanceLogs; }, [attendanceLogs]);
   useEffect(() => { statusStateRef.current = statusState; }, [statusState]);
 
+  // Network Offline / Online listener
+  useEffect(() => {
+    const updateOnlineStatus = () => {
+      setIsOnline(navigator.onLine);
+    };
+    setIsOnline(navigator.onLine);
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+    };
+  }, []);
+
   // Determine if this screen is targeted by override
   const targets = screenConfig.targetScreenIds || ["ALL"];
   const isTargeted = targets.includes("ALL") || targets.includes(connectedScreenId);
   const activeScreenMode = isTargeted ? (screenConfig.mode || "NORMAL") : "NORMAL";
+
+  // Effective Screen Mode considering offline network and camera hardware error
+  let effectiveScreenMode = activeScreenMode;
+  if (!isOnline) {
+    effectiveScreenMode = "DISCONNECTED";
+  } else if (hasCameraError && activeScreenMode === "NORMAL") {
+    effectiveScreenMode = "NO_CAMERA";
+  }
 
   // Fullscreen change listener
   useEffect(() => {
@@ -278,7 +304,7 @@ export default function ScreeningPage() {
       setIsPinPromptOpen(false);
       setPromptInputPin("");
       setPinPromptError("");
-      setOverrideSelectedMode(activeScreenMode);
+      setOverrideSelectedMode(effectiveScreenMode);
       setIsSettingsModalOpen(true);
     } else {
       setPinPromptError("Incorrect Screen PIN.");
@@ -312,7 +338,7 @@ export default function ScreeningPage() {
 
   // ─── Force update progress ────────────────────────────────────────────────
   useEffect(() => {
-    if (screenConfig.reloadId && activeScreenMode === "UPDATING") {
+    if (screenConfig.reloadId && effectiveScreenMode === "UPDATING") {
       const rid = String(screenConfig.reloadId);
       if (sessionStorage.getItem("last_reload_id") === rid) return;
       sessionStorage.setItem("last_reload_id", rid);
@@ -329,27 +355,57 @@ export default function ScreeningPage() {
       }, 100);
       return () => clearInterval(iv);
     }
-  }, [activeScreenMode, screenConfig.reloadId]);
+  }, [effectiveScreenMode, screenConfig.reloadId]);
 
-  // ─── Camera ───────────────────────────────────────────────────────────────
+  // ─── Hardware Camera Start & Failure Detection ────────────────────────────
   useEffect(() => {
-    if (activeScreenMode !== "NORMAL" || !isScreenAuthenticated) return;
+    if (effectiveScreenMode !== "NORMAL" || !isScreenAuthenticated) return;
     let stream = null;
+    setHasCameraError(false);
+
     const start = async () => {
       try {
         const pid = localStorage.getItem("preferred_camera_device_id");
-        if (pid) { try { stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: pid } } }); } catch {} }
-        if (!stream) stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } });
-        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
-      } catch (e) { console.error("Camera:", e); }
+        if (pid) { 
+          try { 
+            stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: pid } } }); 
+          } catch {} 
+        }
+        if (!stream) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } });
+        }
+        
+        if (videoRef.current && stream) { 
+          videoRef.current.srcObject = stream; 
+          videoRef.current.play().catch(() => {});
+
+          const videoTracks = stream.getVideoTracks();
+          if (videoTracks.length > 0) {
+            videoTracks[0].onended = () => {
+              console.warn("Camera track disconnected");
+              setHasCameraError(true);
+            };
+          } else {
+            setHasCameraError(true);
+          }
+        } else {
+          setHasCameraError(true);
+        }
+      } catch (e) { 
+        console.error("Camera output error:", e);
+        setHasCameraError(true);
+      }
     };
+
     start();
-    return () => { if (stream) stream.getTracks().forEach((t) => t.stop()); };
-  }, [activeScreenMode, isScreenAuthenticated]);
+    return () => { 
+      if (stream) stream.getTracks().forEach((t) => t.stop()); 
+    };
+  }, [effectiveScreenMode, isScreenAuthenticated]);
 
   // ─── Detection loop ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isModelsLoaded || activeScreenMode !== "NORMAL" || !isScreenAuthenticated) return;
+    if (!isModelsLoaded || effectiveScreenMode !== "NORMAL" || !isScreenAuthenticated) return;
 
     let processing = false;
 
@@ -466,7 +522,7 @@ export default function ScreeningPage() {
     animationFrameRef.current = requestAnimationFrame(loop);
     return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isModelsLoaded, activeScreenMode, isScreenAuthenticated]);
+  }, [isModelsLoaded, effectiveScreenMode, isScreenAuthenticated]);
 
   const theme = THEMES[statusState] || THEMES.IDLE;
   const isActive = statusState !== "IDLE";
@@ -551,15 +607,15 @@ export default function ScreeningPage() {
   return (
     <div className="fixed inset-0 bg-[#030303] flex flex-col font-sans overflow-hidden" style={{ color: "white" }}>
       {/* ─── DYNAMIC VIEW BODY (NORMAL VS OVERRIDE SCREENS) ───────────────── */}
-      {activeScreenMode !== "NORMAL" ? (
+      {effectiveScreenMode !== "NORMAL" ? (
         <div className="flex-1 flex flex-col font-sans text-white overflow-hidden">
           <OverrideTopBar date={currentDate} time={currentTime} screenId={connectedScreenId} />
           <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-8">
-            {activeScreenMode === "UPDATING" && <UpdatingScreen progress={updateProgress} />}
-            {activeScreenMode === "CLOSED"    && <ClosedScreen />}
-            {activeScreenMode === "DISCONNECTED" && <DisconnectedScreen />}
-            {activeScreenMode === "NO_CAMERA" && <NoCameraScreen />}
-            {activeScreenMode === "MAINTENANCE" && <MaintenanceScreen adminMessage={screenConfig.adminMessage} />}
+            {effectiveScreenMode === "UPDATING" && <UpdatingScreen progress={updateProgress} />}
+            {effectiveScreenMode === "CLOSED"    && <ClosedScreen />}
+            {effectiveScreenMode === "DISCONNECTED" && <DisconnectedScreen />}
+            {effectiveScreenMode === "NO_CAMERA" && <NoCameraScreen />}
+            {effectiveScreenMode === "MAINTENANCE" && <MaintenanceScreen adminMessage={screenConfig.adminMessage} />}
           </div>
           <OverrideFooter />
         </div>
@@ -936,7 +992,7 @@ export default function ScreeningPage() {
               <div className="p-4 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-3">
                 <div className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center justify-between">
                   <span className="flex items-center gap-1.5"><Tv className="w-4 h-4 text-indigo-400" /> Screen Mode Override</span>
-                  <span className="text-[10px] font-mono text-indigo-400">Current: {activeScreenMode}</span>
+                  <span className="text-[10px] font-mono text-indigo-400">Current: {effectiveScreenMode}</span>
                 </div>
 
                 <div className="grid grid-cols-5 gap-1">
@@ -1155,7 +1211,7 @@ function DisconnectedScreen() {
       </div>
       <div>
         <h2 className="text-xl font-black tracking-widest uppercase text-white">DISCONNECTED</h2>
-        <p className="text-neutral-500 text-[11px] font-mono tracking-widest mt-2">ERR · 40X2E</p>
+        <p className="text-neutral-500 text-[11px] font-mono tracking-widest mt-2">SERVER DISCONNECTED · NO INTERNET CONNECTION</p>
       </div>
     </motion.div>
   );
@@ -1168,9 +1224,9 @@ function NoCameraScreen() {
         <CameraOff className="w-10 h-10 text-[#D32F2F]" />
       </div>
       <div>
-        <h2 className="text-xl font-black tracking-widest uppercase text-white">NO CAMERA</h2>
-        <p className="text-neutral-500 text-xs tracking-widest mt-1 uppercase">Check connection &amp; wires</p>
-        <p className="text-neutral-700 text-[10px] font-mono mt-2">ERR · 40X2E</p>
+        <h2 className="text-xl font-black tracking-widest uppercase text-white">NO CAMERA OUTPUT</h2>
+        <p className="text-neutral-500 text-xs tracking-widest mt-1 uppercase">Camera hardware missing or disconnected</p>
+        <p className="text-neutral-700 text-[10px] font-mono mt-2">ERR · NO_VIDEO_STREAM</p>
       </div>
     </motion.div>
   );
