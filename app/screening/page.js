@@ -17,13 +17,13 @@ import {
 
 // ─── Status theme map ─────────────────────────────────────────────────────────
 const THEMES = {
-  IDLE:                     { glow: "rgba(255,255,255,0.04)", ring: "#ffffff22", label: "READY TO SCAN",      icon: null,          accent: "#ffffff33", barColor: "transparent" },
-  ATTENDANCE_MARKED:        { glow: "rgba(0,200,83,0.18)",   ring: "#00C853",   label: "ATTENDANCE MARKED",  icon: CheckCircle2,  accent: "#00C853",   barColor: "#00A82D" },
-  ATTENDANCE_ALREADY_MARKED:{ glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "ALREADY MARKED",     icon: Info,          accent: "#1E88E5",   barColor: "#1565C0" },
-  NOT_IN_SET:               { glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "NOT IN ACTIVE SET",  icon: Info,          accent: "#1E88E5",   barColor: "#1565C0" },
-  TIME_EXCEEDED:            { glow: "rgba(211,47,47,0.18)",  ring: "#D32F2F",   label: "TIME EXCEEDED",      icon: XCircle,       accent: "#D32F2F",   barColor: "#B71C1C" },
-  SUSPENDED:                { glow: "rgba(211,47,47,0.18)",  ring: "#D32F2F",   label: "SUSPENDED",          icon: XCircle,       accent: "#D32F2F",   barColor: "#B71C1C" },
-  FAILED_TO_RECOGNISE:      { glow: "rgba(255,109,0,0.18)",  ring: "#FF6D00",   label: "NOT RECOGNISED",     icon: XCircle,       accent: "#FF6D00",   barColor: "#E65100" },
+  IDLE:                     { glow: "rgba(255,255,255,0.04)", ring: "#ffffff22", label: "READY TO SCAN",      icon: null,          accent: "#ffffff33", barBg: "transparent" },
+  ATTENDANCE_MARKED:        { glow: "rgba(0,200,83,0.18)",   ring: "#00C853",   label: "ATTENDANCE MARKED",  icon: CheckCircle2,  accent: "#00C853",   barBg: "#00A82D" },
+  ATTENDANCE_ALREADY_MARKED:{ glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "ATTENDANCE ALREADY MARKED", icon: Info,   accent: "#1E88E5",   barBg: "#1565C0" },
+  NOT_IN_SET:               { glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "NOT IN ATTENDANCE SET",   icon: Info,   accent: "#1E88E5",   barBg: "#1565C0" },
+  TIME_EXCEEDED:            { glow: "rgba(211,47,47,0.18)",  ring: "#D32F2F",   label: "TIME EXCEEDED",      icon: XCircle,       accent: "#D32F2F",   barBg: "#D32F2F" },
+  SUSPENDED:                { glow: "rgba(211,47,47,0.18)",  ring: "#D32F2F",   label: "SUSPENDED",          icon: XCircle,       accent: "#D32F2F",   barBg: "#D32F2F" },
+  FAILED_TO_RECOGNISE:      { glow: "rgba(255,109,0,0.18)",  ring: "#FF6D00",   label: "FAILED TO RECOGNISE", icon: XCircle,      accent: "#FF6D00",   barBg: "#FF6D00" },
 };
 
 const CIRCLE_SIZE = 300; // px
@@ -434,7 +434,8 @@ export default function ScreeningPage() {
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: -8, opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className={`w-full py-3.5 px-4 ${theme.barBg} text-white font-extrabold text-sm sm:text-base tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg`}
+                style={{ backgroundColor: theme.barBg }}
+                className="w-full py-3.5 px-4 text-white font-extrabold text-sm sm:text-base tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg"
               >
                 {StatusIcon && <StatusIcon className="w-5 h-5 text-white shrink-0" />}
                 <span
