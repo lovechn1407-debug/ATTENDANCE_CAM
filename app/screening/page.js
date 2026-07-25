@@ -22,18 +22,15 @@ import {
   CameraOff, 
   AlertTriangle, 
   RefreshCw, 
-  Wifi,
-  WifiOff,
-  Settings,
-  Lock,
-  Key,
-  LogOut,
-  List,
-  Tv,
-  Check,
-  ShieldCheck,
+  Settings, 
+  Lock, 
+  Key, 
+  LogOut, 
+  List, 
+  Tv, 
+  Calendar, 
   Clock,
-  Calendar
+  Delete
 } from "lucide-react";
 
 // ─── Status theme map ─────────────────────────────────────────────────────────
@@ -50,6 +47,42 @@ const THEMES = {
 const CIRCLE_SIZE = 300; // px
 const RING_R = 149;
 const CIRCUMFERENCE = 2 * Math.PI * RING_R;
+
+// ─── On-Screen Numpad Component (No System Keyboard) ────────────────────────
+function OnScreenNumpad({ value, onChange }) {
+  const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Clear", "0", "⌫"];
+
+  const handleClick = (digit) => {
+    if (digit === "⌫") {
+      onChange(value.slice(0, -1));
+    } else if (digit === "Clear") {
+      onChange("");
+    } else {
+      if (value.length < 8) {
+        onChange(value + digit);
+      }
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-3 gap-3 w-full max-w-[280px] mx-auto pt-2">
+      {digits.map((d) => (
+        <button
+          key={d}
+          type="button"
+          onClick={() => handleClick(d)}
+          className={`h-13 rounded-2xl font-bold text-lg flex items-center justify-center transition-all select-none active:scale-95 shadow-md ${
+            d === "Clear" || d === "⌫"
+              ? "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 text-sm"
+              : "bg-neutral-900 border border-neutral-700/70 text-white hover:bg-neutral-800 hover:border-indigo-500/50"
+          }`}
+        >
+          {d}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function ScreeningPage() {
   const [students, setStudents] = useState([]);
@@ -182,7 +215,7 @@ export default function ScreeningPage() {
 
   // ─── Screen Login Handler ─────────────────────────────────────────────────
   const handleConnectScreen = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!selectedScreenId || !inputScreenPin) {
       setLoginErrorMsg("Please select a Screen ID and enter the Screen PIN.");
       return;
@@ -210,7 +243,7 @@ export default function ScreeningPage() {
 
   // ─── Settings PIN Verification Handler ────────────────────────────────────
   const handleVerifySettingsPin = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const savedPin = localStorage.getItem("connected_screen_pin");
     if (String(promptInputPin).trim() === String(savedPin).trim()) {
       setIsPinPromptOpen(false);
@@ -412,17 +445,17 @@ export default function ScreeningPage() {
   // ─── RENDER SCREEN LOGIN OVERLAY (If not connected/authenticated) ──────────
   if (!isScreenAuthenticated) {
     return (
-      <div className="fixed inset-0 bg-[#050505] flex items-center justify-center p-6 text-white font-sans z-50">
+      <div className="fixed inset-0 bg-[#050505] flex items-center justify-center p-6 text-white font-sans z-50 overflow-y-auto">
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           className="bg-[#111111] border border-neutral-800 p-8 rounded-3xl max-w-md w-full shadow-2xl space-y-6"
         >
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center mx-auto shadow-lg">
-              <Tv className="w-8 h-8" />
+            <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center mx-auto shadow-lg">
+              <Tv className="w-7 h-7" />
             </div>
-            <h2 className="text-xl font-black tracking-widest uppercase text-white">
+            <h2 className="text-lg font-black tracking-widest uppercase text-white">
               CONNECT SCREEN TO SERVER
             </h2>
             <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider">
@@ -430,7 +463,7 @@ export default function ScreeningPage() {
             </p>
           </div>
 
-          <form onSubmit={handleConnectScreen} className="space-y-4">
+          <div className="space-y-4">
             {loginErrorMsg && (
               <div className="p-3 bg-red-950/60 border border-red-500/50 rounded-xl text-red-300 text-xs font-semibold text-center">
                 {loginErrorMsg}
@@ -459,32 +492,26 @@ export default function ScreeningPage() {
               </select>
             </div>
 
-            {/* Input PIN Password */}
+            {/* Readonly Display Dots for PIN (No System Keyboard) */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">
-                Enter Screen PIN / Password
+              <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider text-center">
+                Enter Screen PIN
               </label>
-              <input
-                type="password"
-                required
-                placeholder="Enter Screen PIN"
-                value={inputScreenPin}
-                onChange={(e) => setInputScreenPin(e.target.value)}
-                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-sm font-mono font-bold text-white tracking-widest focus:outline-none focus:border-indigo-500"
-              />
+              <div className="w-full py-3.5 bg-neutral-900 border border-neutral-700 rounded-xl text-center font-mono text-xl font-bold tracking-[0.4em] text-indigo-400">
+                {inputScreenPin ? "•".repeat(inputScreenPin.length) : <span className="text-neutral-600 text-xs font-sans font-normal tracking-normal">Touch numpad below</span>}
+              </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={isSubmittingLogin || availableScreens.length === 0}
-              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm uppercase tracking-widest rounded-xl shadow-lg transition-all disabled:opacity-50"
-            >
-              {isSubmittingLogin ? "Connecting to Server..." : "Connect Screen"}
-            </button>
-          </form>
+            {/* On-Screen Touch Numpad */}
+            <OnScreenNumpad value={inputScreenPin} onChange={setInputScreenPin} />
 
-          <div className="pt-2 text-center text-[10px] text-neutral-600 font-mono tracking-widest uppercase border-t border-neutral-900">
-            BIOMETRIC AI CLIENT · SYSTEM AUTH V1.2.7
+            <button
+              onClick={handleConnectScreen}
+              disabled={isSubmittingLogin || availableScreens.length === 0 || !inputScreenPin}
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm uppercase tracking-widest rounded-xl shadow-lg transition-all disabled:opacity-40 mt-2"
+            >
+              {isSubmittingLogin ? "Connecting..." : "Connect Screen"}
+            </button>
           </div>
         </motion.div>
       </div>
@@ -495,7 +522,7 @@ export default function ScreeningPage() {
   if (screenConfig.mode !== "NORMAL") {
     return (
       <div className="fixed inset-0 bg-[#030303] flex flex-col font-sans text-white overflow-hidden">
-        <OverrideTopBar time={currentTime} screenId={connectedScreenId} onOpenPin={() => setIsPinPromptOpen(true)} />
+        <OverrideTopBar date={currentDate} time={currentTime} screenId={connectedScreenId} />
         <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-8">
           {screenConfig.mode === "UPDATING" && <UpdatingScreen progress={updateProgress} />}
           {screenConfig.mode === "CLOSED"    && <ClosedScreen />}
@@ -512,31 +539,21 @@ export default function ScreeningPage() {
   return (
     <div className="fixed inset-0 bg-[#030303] flex flex-col font-sans overflow-hidden" style={{ color: "white" }}>
 
-      {/* === TOP STATUS BAR === */}
-      <div className="flex items-center justify-between px-6 py-4 shrink-0">
-        {/* Left: Screen ID + Settings Gear */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-mono font-bold text-white tracking-widest uppercase">
-              ID: {connectedScreenId || "SCREEN_01"}
-            </span>
-          </div>
-
-          <button
-            onClick={() => setIsPinPromptOpen(true)}
-            className="p-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white transition-all"
-            title="Screen Settings (PIN Protected)"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+      {/* === TOP STATUS BAR (Dark Greyish-Black Bar) === */}
+      <div className="bg-[#121215]/95 backdrop-blur-md border-b border-white/10 px-6 py-3 shrink-0 flex items-center justify-between z-30 shadow-md">
+        {/* Left: Screen ID (Slightly big, bold, green pulse) */}
+        <div className="flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <span className="text-base sm:text-lg font-black font-mono text-white tracking-wider uppercase">
+            ID: {connectedScreenId || "SCREEN_01"}
+          </span>
         </div>
 
-        {/* Right: Date & Time Together */}
-        <div className="flex items-center gap-2 text-xs font-mono font-bold text-neutral-300">
-          <Calendar className="w-3.5 h-3.5 text-neutral-500" />
+        {/* Right: Merged Date & Time together */}
+        <div className="flex items-center gap-2 text-xs sm:text-sm font-mono font-bold text-neutral-200 bg-white/5 px-3.5 py-1.5 rounded-xl border border-white/10 shrink-0 whitespace-nowrap shadow-inner">
+          <Calendar className="w-3.5 h-3.5 text-neutral-400" />
           <span>{currentDate}</span>
-          <span className="text-neutral-600">·</span>
+          <span className="text-neutral-500 font-normal">|</span>
           <Clock className="w-3.5 h-3.5 text-indigo-400" />
           <span className="text-indigo-400">{currentTime}</span>
         </div>
@@ -805,7 +822,7 @@ export default function ScreeningPage() {
                   <div
                     key={i}
                     className="w-1.5 h-1.5 rounded-full bg-neutral-700"
-                    style={{ animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite` }}
+                    style={{ animation: `pulse 1.4s ease-in-out ${i * 0.22}s infinite` }}
                   />
                 ))}
               </div>
@@ -814,6 +831,15 @@ export default function ScreeningPage() {
         </AnimatePresence>
       </div>
 
+      {/* Settings Gear Button at Bottom Right Corner */}
+      <button
+        onClick={() => setIsPinPromptOpen(true)}
+        className="fixed bottom-4 right-4 z-40 p-3.5 rounded-2xl bg-[#18181b]/95 border border-white/20 text-neutral-300 hover:text-white shadow-2xl hover:scale-105 active:scale-95 transition-all"
+        title="Screen Settings (PIN Protected)"
+      >
+        <Settings className="w-5 h-5 text-indigo-400" />
+      </button>
+
       {/* Footer */}
       <div className="shrink-0 pb-4 text-center">
         <span className="text-[9px] tracking-[0.3em] text-neutral-800 uppercase font-mono">
@@ -821,40 +847,40 @@ export default function ScreeningPage() {
         </span>
       </div>
 
-      {/* ─── MODAL 1: SETTINGS PIN PROMPT OVERLAY ──────────────────────────── */}
+      {/* ─── MODAL 1: SETTINGS PIN PROMPT OVERLAY (On-Screen Touch Numpad) ──── */}
       {isPinPromptOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 text-white font-sans z-50">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#111111] border border-neutral-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl space-y-4">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-6 text-white font-sans z-50 overflow-y-auto">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#111111] border border-neutral-800 p-6 rounded-3xl max-w-sm w-full shadow-2xl space-y-4">
             <div className="text-center space-y-1">
-              <Lock className="w-8 h-8 text-indigo-400 mx-auto" />
-              <h3 className="text-lg font-bold uppercase tracking-wider">ENTER SCREEN PIN</h3>
-              <p className="text-xs text-neutral-400">Type Screen PIN to access client settings</p>
+              <Lock className="w-7 h-7 text-indigo-400 mx-auto" />
+              <h3 className="text-base font-bold uppercase tracking-wider">ENTER SCREEN PIN</h3>
+              <p className="text-xs text-neutral-400">Touch numpad to access settings</p>
             </div>
 
-            <form onSubmit={handleVerifySettingsPin} className="space-y-4">
+            <div className="space-y-3">
               {pinPromptError && (
                 <div className="p-2 bg-red-950/60 border border-red-500/50 rounded-lg text-red-300 text-xs text-center font-semibold">
                   {pinPromptError}
                 </div>
               )}
-              <input
-                type="password"
-                required
-                autoFocus
-                placeholder="Enter Screen PIN"
-                value={promptInputPin}
-                onChange={(e) => setPromptInputPin(e.target.value)}
-                className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-700 rounded-xl text-sm font-mono font-bold text-white text-center tracking-widest focus:outline-none focus:border-indigo-500"
-              />
-              <div className="flex gap-2">
-                <button type="button" onClick={() => { setIsPinPromptOpen(false); setPromptInputPin(""); setPinPromptError(""); }} className="flex-1 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-xl text-xs font-semibold">
+              
+              {/* Display PIN Dots */}
+              <div className="w-full py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-center font-mono text-xl font-bold tracking-[0.4em] text-indigo-400">
+                {promptInputPin ? "•".repeat(promptInputPin.length) : <span className="text-neutral-600 text-xs font-sans tracking-normal">Enter PIN</span>}
+              </div>
+
+              {/* On-Screen Touch Numpad */}
+              <OnScreenNumpad value={promptInputPin} onChange={setPromptInputPin} />
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => { setIsPinPromptOpen(false); setPromptInputPin(""); setPinPromptError(""); }} className="flex-1 py-2.5 bg-neutral-800 hover:bg-neutral-700 rounded-xl text-xs font-semibold">
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold uppercase tracking-wider">
+                <button type="button" onClick={handleVerifySettingsPin} disabled={!promptInputPin} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-40">
                   Verify PIN
                 </button>
               </div>
-            </form>
+            </div>
           </motion.div>
         </div>
       )}
@@ -871,7 +897,7 @@ export default function ScreeningPage() {
                   <p className="text-xs text-neutral-400 font-mono">ID: {connectedScreenId}</p>
                 </div>
               </div>
-              <button onClick={() => setIsSettingsModalOpen(false)} className="text-neutral-400 hover:text-white text-xs font-bold px-2 py-1 bg-neutral-900 rounded-lg">
+              <button onClick={() => setIsSettingsModalOpen(false)} className="text-neutral-400 hover:text-white text-xs font-bold px-2.5 py-1.5 bg-neutral-900 rounded-lg">
                 Close
               </button>
             </div>
@@ -950,16 +976,11 @@ export default function ScreeningPage() {
 
 // ─── Override screen sub-components ──────────────────────────────────────────
 
-function OverrideTopBar({ time, screenId, onOpenPin }) {
+function OverrideTopBar({ date, time, screenId }) {
   return (
-    <div className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-white/5">
-      <div className="flex items-center gap-3">
-        <span className="text-[10px] tracking-[0.25em] uppercase font-semibold text-neutral-600">ID: {screenId || "SCREEN_01"}</span>
-        <button onClick={onOpenPin} className="p-1 rounded bg-neutral-900 text-neutral-500 hover:text-white">
-          <Settings className="w-3.5 h-3.5" />
-        </button>
-      </div>
-      <span className="text-xs font-mono text-neutral-500">{time}</span>
+    <div className="bg-[#121215]/95 border-b border-white/10 px-6 py-3 shrink-0 flex items-center justify-between">
+      <span className="text-sm font-mono font-bold text-white uppercase">ID: {screenId || "SCREEN_01"}</span>
+      <span className="text-xs font-mono text-neutral-400">{date} · {time}</span>
     </div>
   );
 }
@@ -1012,7 +1033,7 @@ function DisconnectedScreen() {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-6">
       <div className="w-20 h-20 rounded-full border border-white/20 flex items-center justify-center">
-        <WifiOff className="w-10 h-10 text-neutral-300" />
+        <Power className="w-10 h-10 text-neutral-300" />
       </div>
       <div>
         <h2 className="text-xl font-black tracking-widest uppercase text-white">DISCONNECTED</h2>
