@@ -426,7 +426,7 @@ export default function ScreeningPage() {
         {isActive && (
           <>
             <StatusIcon className="w-5 h-5 text-white shrink-0" />
-            <span>{theme.title}</span>
+            <span className="t-shimmer" data-text={theme.title}>{theme.title}</span>
           </>
         )}
       </div>
