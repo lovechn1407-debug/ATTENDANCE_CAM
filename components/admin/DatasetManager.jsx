@@ -13,13 +13,18 @@ import {
   Square,
   AlertCircle,
   Sparkles,
-  Layers
+  Layers,
+  Search,
+  UserCheck,
+  Filter,
+  Users
 } from "lucide-react";
 import { saveDataset, toggleDatasetActive, deleteDataset } from "@/lib/firebase";
 
 export default function DatasetManager({ datasets, students }) {
   const [isCreating, setIsCreating] = useState(false);
   const [name, setName] = useState("");
+  const [selectionMode, setSelectionMode] = useState("FILTER"); // "FILTER" | "MANUAL"
   
   // Dynamic filter choices from student list
   const availableClasses = Array.from(new Set(students.map(s => s.class).filter(Boolean))).sort();
@@ -30,6 +35,10 @@ export default function DatasetManager({ datasets, students }) {
   const [selectedClasses, setSelectedClasses] = useState(availableClasses);
   const [selectedSections, setSelectedSections] = useState(availableSections);
   const [selectedGroups, setSelectedGroups] = useState(availableGroups);
+
+  // Selected Individual Students
+  const [selectedStudentIds, setSelectedStudentIds] = useState(students.map(s => s.studentId || s.id));
+  const [studentSearchQuery, setStudentSearchQuery] = useState("");
 
   // Timings
   const [entryTime, setEntryTime] = useState("08:00");
@@ -48,14 +57,53 @@ export default function DatasetManager({ datasets, students }) {
     }
   };
 
+  const toggleStudent = (id) => {
+    if (selectedStudentIds.includes(id)) {
+      setSelectedStudentIds(selectedStudentIds.filter(i => i !== id));
+    } else {
+      setSelectedStudentIds([...selectedStudentIds, id]);
+    }
+  };
+
+  const selectAllStudents = () => {
+    setSelectedStudentIds(students.map(s => s.studentId || s.id));
+  };
+
+  const deselectAllStudents = () => {
+    setSelectedStudentIds([]);
+  };
+
+  // Filtered Students for Manual Mode
+  const filteredStudents = students.filter(s => {
+    const query = studentSearchQuery.toLowerCase();
+    const matchName = s.name?.toLowerCase().includes(query);
+    const matchId = (s.studentId || s.id)?.toLowerCase().includes(query);
+    const matchClass = s.class?.toLowerCase().includes(query);
+    return matchName || matchId || matchClass;
+  });
+
+  // Calculate matched count in FILTER mode
+  const filterMatchedStudents = students.filter(s => {
+    const matchClass = selectedClasses.length ? selectedClasses.includes(s.class) : true;
+    const matchSection = selectedSections.length ? selectedSections.includes(s.section) : true;
+    const matchGroup = selectedGroups.length ? selectedGroups.includes(s.group) : true;
+    return matchClass && matchSection && matchGroup;
+  });
+
   const handleCreateDataset = async (e) => {
     e.preventDefault();
     if (!name.trim()) {
       alert("Please give this dataset a title.");
       return;
     }
-    if (selectedClasses.length === 0 || selectedSections.length === 0 || selectedGroups.length === 0) {
+
+    if (selectionMode === "FILTER" && (selectedClasses.length === 0 || selectedSections.length === 0 || selectedGroups.length === 0)) {
       alert("Please select at least one Class, Section, and Group filter.");
+      return;
+    }
+
+    if (selectionMode === "MANUAL" && selectedStudentIds.length === 0) {
+      alert("Please select at least one student from the list.");
       return;
     }
 
@@ -63,6 +111,8 @@ export default function DatasetManager({ datasets, students }) {
     try {
       await saveDataset({
         name: name.trim(),
+        selectionMode,
+        studentIds: selectionMode === "MANUAL" ? selectedStudentIds : filterMatchedStudents.map(s => s.studentId || s.id),
         classes: selectedClasses,
         sections: selectedSections,
         groups: selectedGroups,
@@ -136,7 +186,7 @@ export default function DatasetManager({ datasets, students }) {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Dataset Name
+              Dataset Title / Name
             </label>
             <input
               type="text"
@@ -148,85 +198,223 @@ export default function DatasetManager({ datasets, students }) {
             />
           </div>
 
-          {/* Bulk Checkbox Selector Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50/60 p-4 rounded-xl border border-slate-200">
-            {/* Class Checkboxes */}
-            <div>
-              <div className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wider">
-                Filter by Class
-              </div>
-              <div className="space-y-1.5">
-                {availableClasses.length === 0 ? (
-                  <div className="text-xs text-slate-400">No classes in database yet</div>
-                ) : (
-                  availableClasses.map((cls) => {
-                    const checked = selectedClasses.includes(cls);
-                    return (
-                      <label key={cls} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleItem(selectedClasses, setSelectedClasses, cls)}
-                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                        />
-                        <span>Class {cls}</span>
-                      </label>
-                    );
-                  })
-                )}
-              </div>
-            </div>
+          {/* Mode Selector Tabs */}
+          <div className="space-y-3">
+            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Student Selection Method
+            </label>
+            <div className="grid grid-cols-2 gap-3 max-w-md">
+              <button
+                type="button"
+                onClick={() => setSelectionMode("FILTER")}
+                className={`py-2.5 px-4 rounded-xl text-xs font-bold border flex items-center justify-center gap-2 transition-all ${
+                  selectionMode === "FILTER"
+                    ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-xs"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Filter className="w-4 h-4" />
+                <span>Class / Sec / Group Filter ({filterMatchedStudents.length})</span>
+              </button>
 
-            {/* Section Checkboxes */}
-            <div>
-              <div className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wider">
-                Filter by Section
-              </div>
-              <div className="space-y-1.5">
-                {availableSections.length === 0 ? (
-                  <div className="text-xs text-slate-400">No sections in database yet</div>
-                ) : (
-                  availableSections.map((sec) => {
-                    const checked = selectedSections.includes(sec);
-                    return (
-                      <label key={sec} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleItem(selectedSections, setSelectedSections, sec)}
-                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                        />
-                        <span>Section {sec}</span>
-                      </label>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* Group Checkboxes */}
-            <div>
-              <div className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wider">
-                Filter by Group
-              </div>
-              <div className="space-y-1.5">
-                {availableGroups.map((grp) => {
-                  const checked = selectedGroups.includes(grp);
-                  return (
-                    <label key={grp} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleItem(selectedGroups, setSelectedGroups, grp)}
-                        className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                      />
-                      <span>Group {grp}</span>
-                    </label>
-                  );
-                })}
-              </div>
+              <button
+                type="button"
+                onClick={() => setSelectionMode("MANUAL")}
+                className={`py-2.5 px-4 rounded-xl text-xs font-bold border flex items-center justify-center gap-2 transition-all ${
+                  selectionMode === "MANUAL"
+                    ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-xs"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Select Specific Students ({selectedStudentIds.length})</span>
+              </button>
             </div>
           </div>
+
+          {/* FILTER MODE: Bulk Checkbox Selector Grid */}
+          {selectionMode === "FILTER" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50/60 p-4 rounded-xl border border-slate-200">
+                {/* Class Checkboxes */}
+                <div>
+                  <div className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wider">
+                    Filter by Class
+                  </div>
+                  <div className="space-y-1.5">
+                    {availableClasses.length === 0 ? (
+                      <div className="text-xs text-slate-400">No classes in database yet</div>
+                    ) : (
+                      availableClasses.map((cls) => {
+                        const checked = selectedClasses.includes(cls);
+                        return (
+                          <label key={cls} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleItem(selectedClasses, setSelectedClasses, cls)}
+                              className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                            />
+                            <span>Class {cls}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Section Checkboxes */}
+                <div>
+                  <div className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wider">
+                    Filter by Section
+                  </div>
+                  <div className="space-y-1.5">
+                    {availableSections.length === 0 ? (
+                      <div className="text-xs text-slate-400">No sections in database yet</div>
+                    ) : (
+                      availableSections.map((sec) => {
+                        const checked = selectedSections.includes(sec);
+                        return (
+                          <label key={sec} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleItem(selectedSections, setSelectedSections, sec)}
+                              className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                            />
+                            <span>Section {sec}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Group Checkboxes */}
+                <div>
+                  <div className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wider">
+                    Filter by Group
+                  </div>
+                  <div className="space-y-1.5">
+                    {availableGroups.map((grp) => {
+                      const checked = selectedGroups.includes(grp);
+                      return (
+                        <label key={grp} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleItem(selectedGroups, setSelectedGroups, grp)}
+                            className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                          />
+                          <span>Group {grp}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Matched Students Summary Badge */}
+              <div className="px-4 py-2.5 bg-indigo-50 rounded-xl border border-indigo-200 text-xs font-semibold text-indigo-900 flex items-center justify-between">
+                <span>Total Students Matched by Filter: <strong>{filterMatchedStudents.length} Students</strong></span>
+                <span className="text-indigo-600">Master DB Total: {students.length}</span>
+              </div>
+            </div>
+          )}
+
+          {/* MANUAL MODE: Searchable Student Selection List */}
+          {selectionMode === "MANUAL" && (
+            <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search student by name, STU_ID, or class..."
+                    value={studentSearchQuery}
+                    onChange={(e) => setStudentSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={selectAllStudents}
+                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={deselectAllStudents}
+                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Deselect All
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-xs font-bold text-slate-600">
+                Selected: <span className="text-indigo-600 font-extrabold">{selectedStudentIds.length}</span> / {students.length} Students
+              </div>
+
+              {/* Scrollable Student Selection Cards List */}
+              <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                {filteredStudents.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-slate-400 bg-white rounded-xl border border-slate-200">
+                    No students match search query.
+                  </div>
+                ) : (
+                  filteredStudents.map((st) => {
+                    const stId = st.studentId || st.id;
+                    const isSelected = selectedStudentIds.includes(stId);
+                    return (
+                      <div
+                        key={stId}
+                        onClick={() => toggleStudent(stId)}
+                        className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                          isSelected
+                            ? "bg-indigo-50/70 border-indigo-300 ring-1 ring-indigo-500/20"
+                            : "bg-white border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="rounded text-indigo-600 w-4 h-4 pointer-events-none"
+                          />
+                          {st.photoUrl ? (
+                            <img src={st.photoUrl} alt={st.name} className="w-9 h-9 rounded-lg object-cover bg-slate-100" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs">
+                              {st.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+
+                          <div>
+                            <div className="text-xs font-bold text-slate-900 leading-tight">{st.name}</div>
+                            <div className="text-[11px] text-slate-400 font-mono">ID: {st.studentId}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[11px] font-semibold">
+                            Class {st.class}-{st.section}
+                          </span>
+                          <span className="px-2 py-0.5 bg-amber-50 text-amber-800 rounded text-[11px] font-semibold border border-amber-200">
+                            Group {st.group}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Timing Configuration Grid */}
           <div className="space-y-3">
@@ -361,8 +549,13 @@ export default function DatasetManager({ datasets, students }) {
                   </button>
                 </div>
 
-                {/* Filter Tags */}
+                {/* Filter Tags & Student Count */}
                 <div className="space-y-2 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <div className="text-xs font-bold text-indigo-700 flex items-center gap-1">
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Included Students: {dataset.studentIds?.length || "All Matched"}</span>
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
                     <span className="text-slate-400 font-semibold">Classes:</span>
                     {dataset.classes?.map((c) => (

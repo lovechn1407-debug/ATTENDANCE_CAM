@@ -191,6 +191,9 @@ export default function ScreeningPage() {
               } else {
                 const ds = activeDatasetsRef.current;
                 const matched = ds.length > 0 ? ds.find((d) => {
+                  if (d.studentIds && d.studentIds.length > 0) {
+                    return d.studentIds.includes(student.studentId || student.id);
+                  }
                   const okC = d.classes?.length ? d.classes.includes(student.class) : true;
                   const okS = d.sections?.length ? d.sections.includes(student.section) : true;
                   const okG = d.groups?.length ? d.groups.includes(student.group) : true;
