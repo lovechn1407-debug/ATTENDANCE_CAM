@@ -19,8 +19,8 @@ import {
   Plus,
   Trash2,
   Lock,
-  MonitorCheck,
-  ShieldAlert
+  CheckSquare,
+  Square
 } from "lucide-react";
 import { 
   subscribeToScreenConfig, 
@@ -49,6 +49,7 @@ export default function CameraConfig() {
   // Screen State Override (Admin Controls)
   const [screenMode, setScreenMode] = useState("NORMAL"); // NORMAL | CLOSED | DISCONNECTED | NO_CAMERA | MAINTENANCE
   const [adminMessage, setAdminMessage] = useState("");
+  const [selectedTargets, setSelectedTargets] = useState(["ALL"]);
   const [savingOverride, setSavingOverride] = useState(false);
   const [overrideSaved, setOverrideSaved] = useState(false);
 
@@ -60,6 +61,7 @@ export default function CameraConfig() {
       if (config) {
         setScreenMode(config.mode || "NORMAL");
         setAdminMessage(config.adminMessage || "");
+        setSelectedTargets(config.targetScreenIds || ["ALL"]);
       }
     });
 
@@ -142,12 +144,28 @@ export default function CameraConfig() {
     setTimeout(() => setIsSaved(false), 3000);
   };
 
+  const handleToggleTarget = (screenId) => {
+    if (screenId === "ALL") {
+      setSelectedTargets(["ALL"]);
+    } else {
+      let updated = selectedTargets.filter((id) => id !== "ALL");
+      if (updated.includes(screenId)) {
+        updated = updated.filter((id) => id !== screenId);
+      } else {
+        updated.push(screenId);
+      }
+      if (updated.length === 0) updated = ["ALL"];
+      setSelectedTargets(updated);
+    }
+  };
+
   const handleSaveScreenOverride = async () => {
     setSavingOverride(true);
     try {
       await updateScreenConfig({
         mode: screenMode,
-        adminMessage: adminMessage.trim()
+        adminMessage: adminMessage.trim(),
+        targetScreenIds: selectedTargets
       });
       setOverrideSaved(true);
       setTimeout(() => setOverrideSaved(false), 3000);
@@ -199,10 +217,10 @@ export default function CameraConfig() {
       {/* Top Banner */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <Camera className="w-5 h-5 text-indigo-600" /> Screening Screen & Connection System
+          <Camera className="w-5 h-5 text-indigo-600" /> Screening Screen &amp; Connection System
         </h2>
         <p className="text-sm text-slate-500 mt-1">
-          Configure authorized client screens, set Screen PIN passwords, and remotely control active screening panels.
+          Configure authorized client screens, set Screen PIN passwords, and remotely publish screen overrides with target screen checkboxes.
         </p>
       </div>
 
@@ -231,7 +249,7 @@ export default function CameraConfig() {
         {isAddingScreen && (
           <form onSubmit={handleAddScreen} className="bg-slate-50 p-5 rounded-2xl border border-indigo-200 shadow-sm space-y-4 animate-in fade-in duration-200">
             <div className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-              <Lock className="w-4 h-4 text-indigo-600" /> Create Authorized Screen ID & PIN
+              <Lock className="w-4 h-4 text-indigo-600" /> Create Authorized Screen ID &amp; PIN
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -351,16 +369,16 @@ export default function CameraConfig() {
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
             <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-              <Tv className="w-5 h-5 text-indigo-600" /> Remote Screen Mode Override (Realtime Force Screen)
+              <Tv className="w-5 h-5 text-indigo-600" /> Remote Screen Mode Override (Selective Publishing)
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Select a screen state to force show on all connected Screening Panels across devices
+              Select a screen state and check which specific screens should apply the override.
             </p>
           </div>
 
           {overrideSaved && (
             <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" /> Live Screen Updated!
+              <CheckCircle2 className="w-4 h-4" /> Override Published!
             </span>
           )}
         </div>
@@ -463,6 +481,50 @@ export default function CameraConfig() {
           </button>
         </div>
 
+        {/* Target Screen Checkbox Selection */}
+        <div className="space-y-2 pt-2 border-t border-slate-100">
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+            <span>Select Target Screens to Apply Override (Checkboxes)</span>
+            <span className="text-[11px] text-indigo-600 font-normal">
+              {selectedTargets.includes("ALL") ? "All Active Screens" : `${selectedTargets.length} Screen(s) Selected`}
+            </span>
+          </label>
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => handleToggleTarget("ALL")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                selectedTargets.includes("ALL")
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+              }`}
+            >
+              {selectedTargets.includes("ALL") ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 text-slate-400" />}
+              <span>ALL SCREENS (GLOBAL)</span>
+            </button>
+
+            {screensList.map((sc) => {
+              const isSelected = selectedTargets.includes(sc.screenId);
+              return (
+                <button
+                  key={sc.id}
+                  type="button"
+                  onClick={() => handleToggleTarget(sc.screenId)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+                    isSelected
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                  }`}
+                >
+                  {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 text-slate-400" />}
+                  <span>{sc.screenId}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Admin Message Text Area (For Maintenance mode) */}
         {screenMode === "MAINTENANCE" && (
           <div className="space-y-2 pt-2 animate-in fade-in duration-200">
@@ -496,7 +558,7 @@ export default function CameraConfig() {
         {/* Settings Panel */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
           <h3 className="font-bold text-slate-900 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Settings className="w-4 h-4 text-indigo-600" /> Camera & Sensitivity Rules
+            <Settings className="w-4 h-4 text-indigo-600" /> Camera &amp; Sensitivity Rules
           </h3>
 
           {errorMsg && (

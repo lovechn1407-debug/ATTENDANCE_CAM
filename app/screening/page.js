@@ -89,7 +89,7 @@ export default function ScreeningPage() {
   const [students, setStudents] = useState([]);
   const [activeDatasets, setActiveDatasets] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
-  const [screenConfig, setScreenConfig] = useState({ mode: "NORMAL", adminMessage: "", reloadId: 0 });
+  const [screenConfig, setScreenConfig] = useState({ mode: "NORMAL", adminMessage: "", reloadId: 0, targetScreenIds: ["ALL"] });
   const [currentTime, setCurrentTime] = useState("");
   const [currentDate, setCurrentDate] = useState("");
   const [isModelsLoaded, setIsModelsLoaded] = useState(false);
@@ -117,6 +117,7 @@ export default function ScreeningPage() {
   const [pinPromptError, setPinPromptError] = useState("");
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
+  const [overrideSelectedMode, setOverrideSelectedMode] = useState("NORMAL");
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -134,6 +135,11 @@ export default function ScreeningPage() {
   useEffect(() => { activeDatasetsRef.current = activeDatasets; }, [activeDatasets]);
   useEffect(() => { attendanceLogsRef.current = attendanceLogs; }, [attendanceLogs]);
   useEffect(() => { statusStateRef.current = statusState; }, [statusState]);
+
+  // Determine if this screen is targeted by override
+  const targets = screenConfig.targetScreenIds || ["ALL"];
+  const isTargeted = targets.includes("ALL") || targets.includes(connectedScreenId);
+  const activeScreenMode = isTargeted ? (screenConfig.mode || "NORMAL") : "NORMAL";
 
   // Fullscreen change listener
   useEffect(() => {
@@ -272,6 +278,7 @@ export default function ScreeningPage() {
       setIsPinPromptOpen(false);
       setPromptInputPin("");
       setPinPromptError("");
+      setOverrideSelectedMode(activeScreenMode);
       setIsSettingsModalOpen(true);
     } else {
       setPinPromptError("Incorrect Screen PIN.");
@@ -305,7 +312,7 @@ export default function ScreeningPage() {
 
   // ─── Force update progress ────────────────────────────────────────────────
   useEffect(() => {
-    if (screenConfig.reloadId && screenConfig.mode === "UPDATING") {
+    if (screenConfig.reloadId && activeScreenMode === "UPDATING") {
       const rid = String(screenConfig.reloadId);
       if (sessionStorage.getItem("last_reload_id") === rid) return;
       sessionStorage.setItem("last_reload_id", rid);
@@ -322,11 +329,11 @@ export default function ScreeningPage() {
       }, 100);
       return () => clearInterval(iv);
     }
-  }, [screenConfig.mode, screenConfig.reloadId]);
+  }, [activeScreenMode, screenConfig.reloadId]);
 
   // ─── Camera ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (screenConfig.mode !== "NORMAL" || !isScreenAuthenticated) return;
+    if (activeScreenMode !== "NORMAL" || !isScreenAuthenticated) return;
     let stream = null;
     const start = async () => {
       try {
@@ -338,11 +345,11 @@ export default function ScreeningPage() {
     };
     start();
     return () => { if (stream) stream.getTracks().forEach((t) => t.stop()); };
-  }, [screenConfig.mode, isScreenAuthenticated]);
+  }, [activeScreenMode, isScreenAuthenticated]);
 
   // ─── Detection loop ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isModelsLoaded || screenConfig.mode !== "NORMAL" || !isScreenAuthenticated) return;
+    if (!isModelsLoaded || activeScreenMode !== "NORMAL" || !isScreenAuthenticated) return;
 
     let processing = false;
 
@@ -459,7 +466,7 @@ export default function ScreeningPage() {
     animationFrameRef.current = requestAnimationFrame(loop);
     return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isModelsLoaded, screenConfig.mode, isScreenAuthenticated]);
+  }, [isModelsLoaded, activeScreenMode, isScreenAuthenticated]);
 
   const theme = THEMES[statusState] || THEMES.IDLE;
   const isActive = statusState !== "IDLE";
@@ -544,15 +551,15 @@ export default function ScreeningPage() {
   return (
     <div className="fixed inset-0 bg-[#030303] flex flex-col font-sans overflow-hidden" style={{ color: "white" }}>
       {/* ─── DYNAMIC VIEW BODY (NORMAL VS OVERRIDE SCREENS) ───────────────── */}
-      {screenConfig.mode !== "NORMAL" ? (
+      {activeScreenMode !== "NORMAL" ? (
         <div className="flex-1 flex flex-col font-sans text-white overflow-hidden">
           <OverrideTopBar date={currentDate} time={currentTime} screenId={connectedScreenId} />
           <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-8">
-            {screenConfig.mode === "UPDATING" && <UpdatingScreen progress={updateProgress} />}
-            {screenConfig.mode === "CLOSED"    && <ClosedScreen />}
-            {screenConfig.mode === "DISCONNECTED" && <DisconnectedScreen />}
-            {screenConfig.mode === "NO_CAMERA" && <NoCameraScreen />}
-            {screenConfig.mode === "MAINTENANCE" && <MaintenanceScreen adminMessage={screenConfig.adminMessage} />}
+            {activeScreenMode === "UPDATING" && <UpdatingScreen progress={updateProgress} />}
+            {activeScreenMode === "CLOSED"    && <ClosedScreen />}
+            {activeScreenMode === "DISCONNECTED" && <DisconnectedScreen />}
+            {activeScreenMode === "NO_CAMERA" && <NoCameraScreen />}
+            {activeScreenMode === "MAINTENANCE" && <MaintenanceScreen adminMessage={screenConfig.adminMessage} />}
           </div>
           <OverrideFooter />
         </div>
@@ -924,7 +931,65 @@ export default function ScreeningPage() {
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
+              {/* Screen Mode Remote Override Section */}
+              <div className="p-4 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-3">
+                <div className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5"><Tv className="w-4 h-4 text-indigo-400" /> Screen Mode Override</span>
+                  <span className="text-[10px] font-mono text-indigo-400">Current: {activeScreenMode}</span>
+                </div>
+
+                <div className="grid grid-cols-5 gap-1">
+                  {[
+                    { id: "NORMAL", label: "Live" },
+                    { id: "CLOSED", label: "Closed" },
+                    { id: "DISCONNECTED", label: "Offline" },
+                    { id: "NO_CAMERA", label: "NoCam" },
+                    { id: "MAINTENANCE", label: "Maint" }
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setOverrideSelectedMode(m.id)}
+                      className={`py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${
+                        overrideSelectedMode === m.id
+                          ? "bg-indigo-600 text-white shadow-md"
+                          : "bg-neutral-800 text-neutral-400 hover:bg-neutral-700"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={async () => {
+                      await updateScreenConfig({
+                        mode: overrideSelectedMode,
+                        targetScreenIds: [connectedScreenId]
+                      });
+                      alert(`Override (${overrideSelectedMode}) published for ${connectedScreenId}!`);
+                    }}
+                    className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-xl shadow-sm"
+                  >
+                    Apply THIS Screen
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await updateScreenConfig({
+                        mode: overrideSelectedMode,
+                        targetScreenIds: ["ALL"]
+                      });
+                      alert(`Global Override (${overrideSelectedMode}) published for ALL screens!`);
+                    }}
+                    className="flex-1 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[11px] font-bold rounded-xl"
+                  >
+                    Apply ALL Screens
+                  </button>
+                </div>
+              </div>
+
               {/* Toggle Fullscreen Mode Option */}
               <button
                 onClick={toggleFullscreen}
