@@ -424,64 +424,56 @@ export default function ScreeningPage() {
           </svg>
         </div>
 
-        {/* === STATUS TEXT BELOW CIRCLE (shimmer effect) === */}
-        <AnimatePresence mode="wait">
-          {isActive ? (
-            <motion.div
-              key={statusState}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="flex flex-col items-center gap-2"
-              style={{ willChange: "transform, opacity" }}
-            >
-              {/* Icon row */}
-              {StatusIcon && (
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: `${theme.accent}22`, border: `1px solid ${theme.accent}55` }}
-                >
-                  <StatusIcon style={{ color: theme.accent }} className="w-4 h-4" />
-                </div>
-              )}
-              {/* Big shimmer label */}
-              <span
-                className="t-shimmer text-[18px] font-black uppercase tracking-[0.2em] text-center leading-none"
-                data-text={theme.label}
-                style={{
-                  "--shimmer-base": `${theme.accent}bb`,
-                  "--shimmer-highlight": "#ffffff",
-                  "--shimmer-dur": "1600ms",
-                }}
+        {/* === FULL RECTANGLE BACKGROUND STATUS BANNER (with shimmer effect) === */}
+        <div className="w-full min-h-[52px] flex items-center shrink-0 mt-4">
+          <AnimatePresence mode="wait">
+            {isActive ? (
+              <motion.div
+                key={statusState}
+                initial={{ y: 12, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -8, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className={`w-full py-3.5 px-4 ${theme.barBg} text-white font-extrabold text-sm sm:text-base tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg`}
               >
-                {theme.label}
-              </span>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="idle"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="flex flex-col items-center gap-1"
-            >
-              <span className="text-[10px] tracking-[0.35em] uppercase text-neutral-700 font-semibold">
-                LOOK INTO CAMERA
-              </span>
-              <div className="flex gap-1.5 mt-1">
-                {[0,1,2].map((i) => (
-                  <div
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-neutral-700"
-                    style={{ animation: `pulse 1.4s ease-in-out ${i * 0.22}s infinite` }}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                {StatusIcon && <StatusIcon className="w-5 h-5 text-white shrink-0" />}
+                <span
+                  className="t-shimmer text-white font-black tracking-widest uppercase text-center"
+                  data-text={theme.label}
+                  style={{
+                    "--shimmer-base": "rgba(255,255,255,0.85)",
+                    "--shimmer-highlight": "#ffffff",
+                    "--shimmer-dur": "1800ms"
+                  }}
+                >
+                  {theme.label}
+                </span>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="idle"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="w-full flex flex-col items-center justify-center gap-1 py-2"
+              >
+                <span className="text-[10px] tracking-[0.35em] uppercase text-neutral-700 font-semibold">
+                  LOOK INTO CAMERA
+                </span>
+                <div className="flex gap-1.5 mt-1">
+                  {[0,1,2].map((i) => (
+                    <div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-neutral-700"
+                      style={{ animation: `pulse 1.4s ease-in-out ${i * 0.22}s infinite` }}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
       </div>
 
