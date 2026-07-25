@@ -7,12 +7,13 @@ import AddStudentModal from "@/components/admin/AddStudentModal";
 import BulkUploadModal from "@/components/admin/BulkUploadModal";
 import DatasetManager from "@/components/admin/DatasetManager";
 import AttendanceRecords from "@/components/admin/AttendanceRecords";
+import SuspensionList from "@/components/admin/SuspensionList";
 import CameraConfig from "@/components/admin/CameraConfig";
 import { subscribeToStudents, subscribeToDatasets, triggerScreenReload } from "@/lib/firebase";
 import { Clock, RefreshCw, CheckCircle2, Loader2 } from "lucide-react";
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState("students"); // "students" | "datasets" | "attendance" | "camera"
+  const [activeTab, setActiveTab] = useState("students"); // "students" | "datasets" | "attendance" | "suspension" | "camera"
   const [students, setStudents] = useState([]);
   const [datasets, setDatasets] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -63,7 +64,8 @@ export default function AdminPage() {
             <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
               {activeTab === "students" && "Student Master Database"}
               {activeTab === "datasets" && "Entry / Exit Datasets"}
-              {activeTab === "attendance" && "Attendance Log Records"}
+              {activeTab === "attendance" && "Attendance Records & Setwise Results"}
+              {activeTab === "suspension" && "Student Suspension Management"}
               {activeTab === "camera" && "Hardware Camera & Biometrics"}
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -124,7 +126,11 @@ export default function AdminPage() {
           )}
 
           {activeTab === "attendance" && (
-            <AttendanceRecords datasets={datasets} />
+            <AttendanceRecords datasets={datasets} students={students} />
+          )}
+
+          {activeTab === "suspension" && (
+            <SuspensionList students={students} />
           )}
 
           {activeTab === "camera" && <CameraConfig />}

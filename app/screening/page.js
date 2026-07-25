@@ -167,12 +167,21 @@ export default function ScreeningPage() {
     let processing = false;
     const loop = async () => {
       const video = videoRef.current;
+      const now = Date.now();
+
+      // Throttle detection loop to run every 120ms
+      if (now - lastProcessedTimeRef.current < 120) {
+        animationFrameRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
       if (video && video.readyState === 4 && !processing) {
         processing = true;
+        lastProcessedTimeRef.current = now;
         try {
           const detections = await detectFacesInVideo(video);
           if (canvasRef.current) drawEyeAndLandmarkMesh(canvasRef.current, video, detections);
-          const now = Date.now();
+          
           if (detections.length > 0) {
             lastFaceSeenRef.current = now;
             const det = detections[0];
@@ -225,7 +234,6 @@ export default function ScreeningPage() {
                 }
               }
             } else {
-              // Face detected in camera, but person is NOT in master database
               if (currentPersonIdRef.current !== "UNKNOWN") {
                 currentPersonIdRef.current = "UNKNOWN";
                 setStatusState("FAILED_TO_RECOGNISE");
@@ -278,16 +286,13 @@ export default function ScreeningPage() {
 
       {/* === TOP STATUS BAR === */}
       <div className="flex items-center justify-between px-6 py-4 shrink-0">
-        {/* Date */}
         <div className="flex flex-col">
           <span className="text-[10px] tracking-[0.25em] uppercase font-semibold text-neutral-500">BIOMETRIC SYSTEM</span>
           <span className="text-xs font-semibold text-neutral-400 tracking-wide">{currentDate}</span>
         </div>
-        {/* Center Title */}
         <div className="text-center">
           <div className="text-[10px] tracking-[0.25em] uppercase font-bold text-neutral-400">ATTENDANCE SCANNER</div>
         </div>
-        {/* Clock */}
         <div className="flex flex-col items-end">
           <span className="text-[10px] tracking-[0.2em] uppercase font-semibold text-neutral-500">LOCAL TIME</span>
           <span className="text-xs font-mono font-semibold text-neutral-400">{currentTime}</span>
@@ -297,7 +302,6 @@ export default function ScreeningPage() {
       {/* === CAMERA CIRCLE SECTION === */}
       <div className="flex-1 flex flex-col items-center justify-center relative gap-6">
 
-        {/* Ambient glow — behind circle */}
         <div
           className="absolute rounded-full pointer-events-none"
           style={{
@@ -309,11 +313,8 @@ export default function ScreeningPage() {
           }}
         />
 
-        {/* Outer wrapper: positions SVG ring exactly on the circle border */}
         <div className="relative">
 
-
-          {/* Corner reticle brackets */}
           {["top-left","top-right","bottom-left","bottom-right"].map((pos) => {
             const isTop    = pos.startsWith("top");
             const isLeft   = pos.endsWith("left");
@@ -338,10 +339,16 @@ export default function ScreeningPage() {
             );
           })}
 
-          {/* Circle — video clipped */}
           <div
-            className="rounded-full overflow-hidden bg-[#0a0a0a] shadow-2xl relative"
-            style={{ width: CIRCLE_SIZE, height: CIRCLE_SIZE }}
+            className={`rounded-full overflow-hidden bg-[#0a0a0a] relative transition-all duration-300 ${
+              isActive ? "border-[6px]" : "border-2 border-neutral-800 shadow-2xl"
+            }`}
+            style={{ 
+              width: CIRCLE_SIZE, 
+              height: CIRCLE_SIZE,
+              borderColor: isActive ? theme.accent : "#262626",
+              boxShadow: isActive ? `0 0 40px ${theme.accent}77` : "0 25px 50px -12px rgba(0, 0, 0, 0.5)"
+            }}
           >
             <video
               ref={videoRef}
@@ -353,7 +360,6 @@ export default function ScreeningPage() {
               className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
             />
 
-            {/* Idle scan line sweep */}
             {!isActive && (
               <div
                 className="absolute left-0 right-0 pointer-events-none"
@@ -366,7 +372,6 @@ export default function ScreeningPage() {
               />
             )}
 
-            {/* Active overlay vignette tint */}
             {isActive && (
               <div
                 className="absolute inset-0 pointer-events-none rounded-full"
@@ -378,7 +383,6 @@ export default function ScreeningPage() {
             )}
           </div>
 
-          {/* SVG Ring — outside the overflow:hidden div */}
           <svg
             className="absolute pointer-events-none"
             style={{
@@ -389,7 +393,6 @@ export default function ScreeningPage() {
             }}
             viewBox={`0 0 ${CIRCLE_SIZE + 8} ${CIRCLE_SIZE + 8}`}
           >
-            {/* base dim ring always visible */}
             <circle
               cx={(CIRCLE_SIZE + 8) / 2}
               cy={(CIRCLE_SIZE + 8) / 2}
@@ -398,7 +401,6 @@ export default function ScreeningPage() {
               stroke="#ffffff12"
               strokeWidth="1.5"
             />
-            {/* animated status ring */}
             <circle
               cx={(CIRCLE_SIZE + 8) / 2}
               cy={(CIRCLE_SIZE + 8) / 2}

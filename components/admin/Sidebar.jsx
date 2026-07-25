@@ -10,7 +10,8 @@ import {
   Scan, 
   ShieldCheck, 
   ChevronRight,
-  Sparkles
+  Sparkles,
+  UserX
 } from "lucide-react";
 
 export default function Sidebar({ activeTab, setActiveTab }) {
@@ -35,6 +36,13 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       description: "View logs grouped by dataset & export CSV",
       icon: ClipboardList,
       badge: "Logs"
+    },
+    {
+      id: "suspension",
+      label: "Suspension List",
+      description: "Manage suspended students & block entry",
+      icon: UserX,
+      badge: "Blocked"
     },
     {
       id: "camera",
