@@ -14,9 +14,21 @@ import {
   CameraOff,
   AlertTriangle,
   Tv,
-  MessageSquare
+  MessageSquare,
+  Key,
+  Plus,
+  Trash2,
+  Lock,
+  MonitorCheck,
+  ShieldAlert
 } from "lucide-react";
-import { subscribeToScreenConfig, updateScreenConfig } from "@/lib/firebase";
+import { 
+  subscribeToScreenConfig, 
+  updateScreenConfig, 
+  subscribeToScreens, 
+  addScreen, 
+  deleteScreen 
+} from "@/lib/firebase";
 
 export default function CameraConfig() {
   const [videoDevices, setVideoDevices] = useState([]);
@@ -26,6 +38,14 @@ export default function CameraConfig() {
   const [cameraStream, setCameraStream] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Screen Connection Authorization System State
+  const [screensList, setScreensList] = useState([]);
+  const [isAddingScreen, setIsAddingScreen] = useState(false);
+  const [newScreenId, setNewScreenId] = useState("");
+  const [newScreenName, setNewScreenName] = useState("");
+  const [newScreenPassword, setNewScreenPassword] = useState("");
+  const [addingScreenLoading, setAddingScreenLoading] = useState(false);
+
   // Screen State Override (Admin Controls)
   const [screenMode, setScreenMode] = useState("NORMAL"); // NORMAL | CLOSED | DISCONNECTED | NO_CAMERA | MAINTENANCE
   const [adminMessage, setAdminMessage] = useState("");
@@ -34,15 +54,21 @@ export default function CameraConfig() {
 
   const previewVideoRef = useRef(null);
 
-  // Realtime subscription for Screen Config
+  // Realtime Subscriptions for Screen Config & Connected Screens List
   useEffect(() => {
-    const unsub = subscribeToScreenConfig((config) => {
+    const unsubConfig = subscribeToScreenConfig((config) => {
       if (config) {
         setScreenMode(config.mode || "NORMAL");
         setAdminMessage(config.adminMessage || "");
       }
     });
-    return () => unsub();
+
+    const unsubScreens = subscribeToScreens(setScreensList);
+
+    return () => {
+      unsubConfig();
+      unsubScreens();
+    };
   }, []);
 
   // Load available video cameras
@@ -132,16 +158,192 @@ export default function CameraConfig() {
     }
   };
 
+  const handleAddScreen = async (e) => {
+    e.preventDefault();
+    if (!newScreenId.trim() || !newScreenPassword.trim()) {
+      alert("Please provide both a Screen ID and a Screen PIN / Password.");
+      return;
+    }
+
+    setAddingScreenLoading(true);
+    try {
+      await addScreen({
+        screenId: newScreenId.trim(),
+        name: newScreenName.trim() || newScreenId.trim(),
+        password: newScreenPassword.trim()
+      });
+
+      setNewScreenId("");
+      setNewScreenName("");
+      setNewScreenPassword("");
+      setIsAddingScreen(false);
+    } catch (err) {
+      alert("Error adding screen: " + err.message);
+    } finally {
+      setAddingScreenLoading(false);
+    }
+  };
+
+  const handleDeleteScreen = async (screenId, screenName) => {
+    if (confirm(`Remove screen "${screenName || screenId}" from authorization list?`)) {
+      try {
+        await deleteScreen(screenId);
+      } catch (err) {
+        alert("Error deleting screen: " + err.message);
+      }
+    }
+  };
+
   return (
     <div className="space-y-8 max-w-5xl">
       {/* Top Banner */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <Camera className="w-5 h-5 text-indigo-600" /> Screening Screen & Hardware Configuration
+          <Camera className="w-5 h-5 text-indigo-600" /> Screening Screen & Connection System
         </h2>
         <p className="text-sm text-slate-500 mt-1">
-          Select dedicated biometric webcams, set sensitivity, and remotely control active screening screens (Maintenance, Closed, Disconnected).
+          Configure authorized client screens, set Screen PIN passwords, and remotely control active screening panels.
         </p>
+      </div>
+
+      {/* Screen Authorization & Connection Management System */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+              <Key className="w-5 h-5 text-indigo-600" /> Authorized Screening Client Connections ({screensList.length})
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Client devices must enter a valid Screen ID and PIN to connect to the biometric server.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setIsAddingScreen(!isAddingScreen)}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-xl shadow-sm shadow-indigo-200 flex items-center gap-2 shrink-0 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{isAddingScreen ? "Cancel" : "Add New Screen"}</span>
+          </button>
+        </div>
+
+        {/* Add New Screen Form */}
+        {isAddingScreen && (
+          <form onSubmit={handleAddScreen} className="bg-slate-50 p-5 rounded-2xl border border-indigo-200 shadow-sm space-y-4 animate-in fade-in duration-200">
+            <div className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <Lock className="w-4 h-4 text-indigo-600" /> Create Authorized Screen ID & PIN
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Screen ID (Unique)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. SCREEN_01 or GATE_NORTH"
+                  value={newScreenId}
+                  onChange={(e) => setNewScreenId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Screen Location / Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Main Entrance Gate 1"
+                  value={newScreenName}
+                  onChange={(e) => setNewScreenName(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Set Screen PIN / Password
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 1234 or 9876"
+                  value={newScreenPassword}
+                  onChange={(e) => setNewScreenPassword(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsAddingScreen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={addingScreenLoading}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs"
+              >
+                {addingScreenLoading ? "Saving..." : "Authorize Screen"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Authorized Screens List Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {screensList.length === 0 ? (
+            <div className="col-span-2 p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs">
+              No authorized screens created yet. Click "Add New Screen" to create Screen IDs and PINs for client connections.
+            </div>
+          ) : (
+            screensList.map((screen) => {
+              const isOnline = screen.status === "ONLINE";
+              return (
+                <div
+                  key={screen.id}
+                  className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-4"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-black text-sm text-slate-900">{screen.screenId}</span>
+                      {isOnline ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" /> ONLINE
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold border border-slate-300">
+                          OFFLINE
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-xs text-slate-600 font-medium">{screen.name}</div>
+                    
+                    <div className="flex items-center gap-3 text-[11px] text-slate-400 font-mono">
+                      <span>PIN: <strong className="text-indigo-600">{screen.password}</strong></span>
+                      <span>Last Seen: {screen.lastSeen ? new Date(screen.lastSeen).toLocaleTimeString() : "Never"}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleDeleteScreen(screen.id, screen.name)}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 transition-all shrink-0"
+                    title="Delete Authorized Screen"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* Screen Mode Override Controls Section */}

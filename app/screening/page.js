@@ -8,11 +8,32 @@ import {
   subscribeToAttendanceLogs, 
   subscribeToScreenConfig,
   updateScreenConfig,
-  recordAttendance 
+  recordAttendance,
+  subscribeToScreens,
+  verifyScreenPin,
+  updateScreenHeartbeat
 } from "@/lib/firebase";
 import { detectFacesInVideo, findBestMatch, drawEyeAndLandmarkMesh, loadFaceApiModels } from "@/lib/faceApi";
 import { 
-  CheckCircle2, XCircle, Info, Power, CameraOff, AlertTriangle, RefreshCw, WifiOff
+  CheckCircle2, 
+  XCircle, 
+  Info, 
+  Power, 
+  CameraOff, 
+  AlertTriangle, 
+  RefreshCw, 
+  Wifi,
+  WifiOff,
+  Settings,
+  Lock,
+  Key,
+  LogOut,
+  List,
+  Tv,
+  Check,
+  ShieldCheck,
+  Clock,
+  Calendar
 } from "lucide-react";
 
 // ─── Status theme map ─────────────────────────────────────────────────────────
@@ -42,7 +63,25 @@ export default function ScreeningPage() {
   const [activeMatch, setActiveMatch] = useState(null);
   const [matchTimestamp, setMatchTimestamp] = useState("");
   const [updateProgress, setUpdateProgress] = useState(0);
-  const [scanLine, setScanLine] = useState(0); // 0-100 for scan line position
+  const [scanLine, setScanLine] = useState(0);
+
+  // ─── Screen Connection Authentication & System States ──────────────────────
+  const [availableScreens, setAvailableScreens] = useState([]);
+  const [connectedScreenId, setConnectedScreenId] = useState("");
+  const [isScreenAuthenticated, setIsScreenAuthenticated] = useState(false);
+  
+  // Login form states
+  const [selectedScreenId, setSelectedScreenId] = useState("");
+  const [inputScreenPin, setInputScreenPin] = useState("");
+  const [loginErrorMsg, setLoginErrorMsg] = useState("");
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
+
+  // Settings & Logs Modal states
+  const [isPinPromptOpen, setIsPinPromptOpen] = useState(false);
+  const [promptInputPin, setPromptInputPin] = useState("");
+  const [pinPromptError, setPinPromptError] = useState("");
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -51,7 +90,7 @@ export default function ScreeningPage() {
   const currentPersonIdRef = useRef(null);
   const lastFaceSeenRef = useRef(0);
 
-  // live refs so detection loop doesn't recreate
+  // Live refs so detection loop doesn't recreate
   const studentsRef = useRef([]);
   const activeDatasetsRef = useRef([]);
   const attendanceLogsRef = useRef([]);
@@ -94,12 +133,27 @@ export default function ScreeningPage() {
     } catch {}
   }, []);
 
-  // ─── Firebase + clock ─────────────────────────────────────────────────────
+  // ─── Firebase + Clock + Available Screens Subscription ────────────────────
   useEffect(() => {
     const unsubStudents = subscribeToStudents(setStudents);
     const unsubDatasets = subscribeToDatasets((data) => setActiveDatasets(data.filter((d) => d.active === true)));
     const unsubLogs = subscribeToAttendanceLogs(setAttendanceLogs);
     const unsubConfig = subscribeToScreenConfig(setScreenConfig);
+    const unsubScreens = subscribeToScreens((screens) => {
+      setAvailableScreens(screens);
+      if (screens.length > 0 && !selectedScreenId) {
+        setSelectedScreenId(screens[0].screenId);
+      }
+    });
+
+    // Check saved credentials in localStorage
+    const savedScreenId = localStorage.getItem("connected_screen_id");
+    const savedScreenPin = localStorage.getItem("connected_screen_pin");
+    if (savedScreenId && savedScreenPin) {
+      setConnectedScreenId(savedScreenId);
+      setIsScreenAuthenticated(true);
+    }
+
     const tick = () => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -107,9 +161,78 @@ export default function ScreeningPage() {
     };
     tick();
     const timer = setInterval(tick, 1000);
+
+    // Heartbeat ping every 15s to keep screen ONLINE in RTDB
+    const heartbeatTimer = setInterval(() => {
+      const sId = localStorage.getItem("connected_screen_id");
+      if (sId) updateScreenHeartbeat(sId);
+    }, 15000);
+
     loadFaceApiModels().then(() => setIsModelsLoaded(true)).catch(console.error);
-    return () => { unsubStudents(); unsubDatasets(); unsubLogs(); unsubConfig(); clearInterval(timer); };
+    return () => { 
+      unsubStudents(); 
+      unsubDatasets(); 
+      unsubLogs(); 
+      unsubConfig(); 
+      unsubScreens();
+      clearInterval(timer);
+      clearInterval(heartbeatTimer);
+    };
   }, []);
+
+  // ─── Screen Login Handler ─────────────────────────────────────────────────
+  const handleConnectScreen = async (e) => {
+    e.preventDefault();
+    if (!selectedScreenId || !inputScreenPin) {
+      setLoginErrorMsg("Please select a Screen ID and enter the Screen PIN.");
+      return;
+    }
+
+    setIsSubmittingLogin(true);
+    setLoginErrorMsg("");
+    try {
+      const res = await verifyScreenPin(selectedScreenId, inputScreenPin);
+      if (res.success) {
+        localStorage.setItem("connected_screen_id", selectedScreenId);
+        localStorage.setItem("connected_screen_pin", inputScreenPin);
+        setConnectedScreenId(selectedScreenId);
+        setIsScreenAuthenticated(true);
+        setInputScreenPin("");
+      } else {
+        setLoginErrorMsg(res.message || "Invalid Screen PIN / Password");
+      }
+    } catch (err) {
+      setLoginErrorMsg("Connection error: " + err.message);
+    } finally {
+      setIsSubmittingLogin(false);
+    }
+  };
+
+  // ─── Settings PIN Verification Handler ────────────────────────────────────
+  const handleVerifySettingsPin = (e) => {
+    e.preventDefault();
+    const savedPin = localStorage.getItem("connected_screen_pin");
+    if (String(promptInputPin).trim() === String(savedPin).trim()) {
+      setIsPinPromptOpen(false);
+      setPromptInputPin("");
+      setPinPromptError("");
+      setIsSettingsModalOpen(true);
+    } else {
+      setPinPromptError("Incorrect Screen PIN.");
+    }
+  };
+
+  // ─── Logout / Disconnect Handler ──────────────────────────────────────────
+  const handleLogoutScreen = () => {
+    if (confirm("Disconnect and Logout this screen from server?")) {
+      localStorage.removeItem("connected_screen_id");
+      localStorage.removeItem("connected_screen_pin");
+      setIsScreenAuthenticated(false);
+      setConnectedScreenId("");
+      setIsSettingsModalOpen(false);
+      setIsPinPromptOpen(false);
+    }
+  };
 
   // ─── Idle scan line animation ─────────────────────────────────────────────
   useEffect(() => {
@@ -147,7 +270,7 @@ export default function ScreeningPage() {
 
   // ─── Camera ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (screenConfig.mode !== "NORMAL") return;
+    if (screenConfig.mode !== "NORMAL" || !isScreenAuthenticated) return;
     let stream = null;
     const start = async () => {
       try {
@@ -159,11 +282,11 @@ export default function ScreeningPage() {
     };
     start();
     return () => { if (stream) stream.getTracks().forEach((t) => t.stop()); };
-  }, [screenConfig.mode]);
+  }, [screenConfig.mode, isScreenAuthenticated]);
 
   // ─── Detection loop ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isModelsLoaded || screenConfig.mode !== "NORMAL") return;
+    if (!isModelsLoaded || screenConfig.mode !== "NORMAL" || !isScreenAuthenticated) return;
 
     let processing = false;
 
@@ -254,7 +377,6 @@ export default function ScreeningPage() {
                 }
               }
             } else {
-              // Face detected in camera, but person is NOT registered in master database
               if (currentPersonIdRef.current !== "UNKNOWN") {
                 currentPersonIdRef.current = "UNKNOWN";
                 setStatusState("FAILED_TO_RECOGNISE");
@@ -263,32 +385,117 @@ export default function ScreeningPage() {
               }
             }
           } else {
-            // No face detected — reset to IDLE after 1 second
             if (now - lastFaceSeenRef.current > 1000 && (currentPersonIdRef.current !== null || statusStateRef.current !== "IDLE")) {
               currentPersonIdRef.current = null;
               setStatusState("IDLE");
               setActiveMatch(null);
             }
           }
-        } catch (e) { console.error(e); }
-        finally { processing = false; }
+        } catch (e) { 
+          console.error("Detection loop error:", e); 
+        } finally { 
+          processing = false; 
+        }
       }
       animationFrameRef.current = requestAnimationFrame(loop);
     };
+
     animationFrameRef.current = requestAnimationFrame(loop);
     return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isModelsLoaded, screenConfig.mode]);
+  }, [isModelsLoaded, screenConfig.mode, isScreenAuthenticated]);
 
   const theme = THEMES[statusState] || THEMES.IDLE;
   const isActive = statusState !== "IDLE";
   const StatusIcon = theme.icon;
 
+  // ─── RENDER SCREEN LOGIN OVERLAY (If not connected/authenticated) ──────────
+  if (!isScreenAuthenticated) {
+    return (
+      <div className="fixed inset-0 bg-[#050505] flex items-center justify-center p-6 text-white font-sans z-50">
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="bg-[#111111] border border-neutral-800 p-8 rounded-3xl max-w-md w-full shadow-2xl space-y-6"
+        >
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center mx-auto shadow-lg">
+              <Tv className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-black tracking-widest uppercase text-white">
+              CONNECT SCREEN TO SERVER
+            </h2>
+            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider">
+              Select authorized Screen ID &amp; enter PIN password
+            </p>
+          </div>
+
+          <form onSubmit={handleConnectScreen} className="space-y-4">
+            {loginErrorMsg && (
+              <div className="p-3 bg-red-950/60 border border-red-500/50 rounded-xl text-red-300 text-xs font-semibold text-center">
+                {loginErrorMsg}
+              </div>
+            )}
+
+            {/* Select Screen ID Dropdown */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">
+                Select Screen ID
+              </label>
+              <select
+                value={selectedScreenId}
+                onChange={(e) => setSelectedScreenId(e.target.value)}
+                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-sm font-mono font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+              >
+                {availableScreens.length === 0 ? (
+                  <option value="">No screens configured in Admin</option>
+                ) : (
+                  availableScreens.map((s) => (
+                    <option key={s.id} value={s.screenId}>
+                      {s.screenId} — {s.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            {/* Input PIN Password */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-neutral-400 uppercase tracking-wider">
+                Enter Screen PIN / Password
+              </label>
+              <input
+                type="password"
+                required
+                placeholder="Enter Screen PIN"
+                value={inputScreenPin}
+                onChange={(e) => setInputScreenPin(e.target.value)}
+                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-sm font-mono font-bold text-white tracking-widest focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmittingLogin || availableScreens.length === 0}
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm uppercase tracking-widest rounded-xl shadow-lg transition-all disabled:opacity-50"
+            >
+              {isSubmittingLogin ? "Connecting to Server..." : "Connect Screen"}
+            </button>
+          </form>
+
+          <div className="pt-2 text-center text-[10px] text-neutral-600 font-mono tracking-widest uppercase border-t border-neutral-900">
+            BIOMETRIC AI CLIENT · SYSTEM AUTH V1.2.7
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   // ─── Override Screens ─────────────────────────────────────────────────────
   if (screenConfig.mode !== "NORMAL") {
     return (
       <div className="fixed inset-0 bg-[#030303] flex flex-col font-sans text-white overflow-hidden">
-        <OverrideTopBar time={currentTime} />
+        <OverrideTopBar time={currentTime} screenId={connectedScreenId} onOpenPin={() => setIsPinPromptOpen(true)} />
         <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-8">
           {screenConfig.mode === "UPDATING" && <UpdatingScreen progress={updateProgress} />}
           {screenConfig.mode === "CLOSED"    && <ClosedScreen />}
@@ -301,29 +508,44 @@ export default function ScreeningPage() {
     );
   }
 
-  // ─── Live Scanner ─────────────────────────────────────────────────────────
+  // ─── Live Scanner (Full Screen) ───────────────────────────────────────────
   return (
-    <div className="fixed inset-0 bg-[#030303] flex flex-col font-sans overflow-hidden"
-         style={{ color: "white" }}>
+    <div className="fixed inset-0 bg-[#030303] flex flex-col font-sans overflow-hidden" style={{ color: "white" }}>
 
       {/* === TOP STATUS BAR === */}
       <div className="flex items-center justify-between px-6 py-4 shrink-0">
-        <div className="flex flex-col">
-          <span className="text-[10px] tracking-[0.25em] uppercase font-semibold text-neutral-500">BIOMETRIC SYSTEM</span>
-          <span className="text-xs font-semibold text-neutral-400 tracking-wide">{currentDate}</span>
+        {/* Left: Screen ID + Settings Gear */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs font-mono font-bold text-white tracking-widest uppercase">
+              ID: {connectedScreenId || "SCREEN_01"}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setIsPinPromptOpen(true)}
+            className="p-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white transition-all"
+            title="Screen Settings (PIN Protected)"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
         </div>
-        <div className="text-center">
-          <div className="text-[10px] tracking-[0.25em] uppercase font-bold text-neutral-400">ATTENDANCE SCANNER</div>
-        </div>
-        <div className="flex flex-col items-end">
-          <span className="text-[10px] tracking-[0.2em] uppercase font-semibold text-neutral-500">LOCAL TIME</span>
-          <span className="text-xs font-mono font-semibold text-neutral-400">{currentTime}</span>
+
+        {/* Right: Date & Time Together */}
+        <div className="flex items-center gap-2 text-xs font-mono font-bold text-neutral-300">
+          <Calendar className="w-3.5 h-3.5 text-neutral-500" />
+          <span>{currentDate}</span>
+          <span className="text-neutral-600">·</span>
+          <Clock className="w-3.5 h-3.5 text-indigo-400" />
+          <span className="text-indigo-400">{currentTime}</span>
         </div>
       </div>
 
       {/* === CAMERA CIRCLE SECTION === */}
       <div className="flex-1 flex flex-col items-center justify-center relative gap-6">
 
+        {/* Ambient glow — behind circle */}
         <div
           className="absolute rounded-full pointer-events-none"
           style={{
@@ -335,8 +557,10 @@ export default function ScreeningPage() {
           }}
         />
 
+        {/* Outer wrapper: positions SVG ring exactly on the circle border */}
         <div className="relative">
 
+          {/* Corner reticle brackets */}
           {["top-left","top-right","bottom-left","bottom-right"].map((pos) => {
             const isTop    = pos.startsWith("top");
             const isLeft   = pos.endsWith("left");
@@ -361,6 +585,7 @@ export default function ScreeningPage() {
             );
           })}
 
+          {/* Circle — video clipped with BOLD BORDER when active */}
           <div
             className={`rounded-full overflow-hidden bg-[#0a0a0a] relative transition-all duration-300 ${
               isActive ? "border-[6px]" : "border-2 border-neutral-800 shadow-2xl"
@@ -382,6 +607,7 @@ export default function ScreeningPage() {
               className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
             />
 
+            {/* Idle scan line sweep */}
             {!isActive && (
               <div
                 className="absolute left-0 right-0 pointer-events-none"
@@ -394,6 +620,7 @@ export default function ScreeningPage() {
               />
             )}
 
+            {/* Active overlay vignette tint */}
             {isActive && (
               <div
                 className="absolute inset-0 pointer-events-none rounded-full"
@@ -405,6 +632,7 @@ export default function ScreeningPage() {
             )}
           </div>
 
+          {/* SVG Ring — outside the overflow:hidden div with BOLD stroke when active */}
           <svg
             className="absolute pointer-events-none"
             style={{
@@ -415,6 +643,7 @@ export default function ScreeningPage() {
             }}
             viewBox={`0 0 ${CIRCLE_SIZE + 8} ${CIRCLE_SIZE + 8}`}
           >
+            {/* base dim ring always visible */}
             <circle
               cx={(CIRCLE_SIZE + 8) / 2}
               cy={(CIRCLE_SIZE + 8) / 2}
@@ -423,17 +652,18 @@ export default function ScreeningPage() {
               stroke="#ffffff12"
               strokeWidth="1.5"
             />
+            {/* animated status ring (bolder stroke) */}
             <circle
               cx={(CIRCLE_SIZE + 8) / 2}
               cy={(CIRCLE_SIZE + 8) / 2}
               r={CIRCLE_SIZE / 2 + 1}
               fill="none"
               stroke={isActive ? theme.ring : "transparent"}
-              strokeWidth="3"
+              strokeWidth={isActive ? "7" : "3"}
               strokeLinecap="round"
               strokeDasharray={CIRCUMFERENCE}
               strokeDashoffset={isActive ? 0 : CIRCUMFERENCE}
-              style={{ transition: "stroke-dashoffset 0.65s cubic-bezier(0.4,0,0.2,1), stroke 0.35s ease" }}
+              style={{ transition: "stroke-dashoffset 0.65s cubic-bezier(0.4,0,0.2,1), stroke 0.35s ease, stroke-width 0.3s ease" }}
               transform={`rotate(-90 ${(CIRCLE_SIZE + 8) / 2} ${(CIRCLE_SIZE + 8) / 2})`}
             />
           </svg>
@@ -591,6 +821,123 @@ export default function ScreeningPage() {
         </span>
       </div>
 
+      {/* ─── MODAL 1: SETTINGS PIN PROMPT OVERLAY ──────────────────────────── */}
+      {isPinPromptOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 text-white font-sans z-50">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#111111] border border-neutral-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl space-y-4">
+            <div className="text-center space-y-1">
+              <Lock className="w-8 h-8 text-indigo-400 mx-auto" />
+              <h3 className="text-lg font-bold uppercase tracking-wider">ENTER SCREEN PIN</h3>
+              <p className="text-xs text-neutral-400">Type Screen PIN to access client settings</p>
+            </div>
+
+            <form onSubmit={handleVerifySettingsPin} className="space-y-4">
+              {pinPromptError && (
+                <div className="p-2 bg-red-950/60 border border-red-500/50 rounded-lg text-red-300 text-xs text-center font-semibold">
+                  {pinPromptError}
+                </div>
+              )}
+              <input
+                type="password"
+                required
+                autoFocus
+                placeholder="Enter Screen PIN"
+                value={promptInputPin}
+                onChange={(e) => setPromptInputPin(e.target.value)}
+                className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-700 rounded-xl text-sm font-mono font-bold text-white text-center tracking-widest focus:outline-none focus:border-indigo-500"
+              />
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setIsPinPromptOpen(false); setPromptInputPin(""); setPinPromptError(""); }} className="flex-1 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-xl text-xs font-semibold">
+                  Cancel
+                </button>
+                <button type="submit" className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold uppercase tracking-wider">
+                  Verify PIN
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* ─── MODAL 2: SCREEN SETTINGS & CONTROL MODAL ─────────────────────── */}
+      {isSettingsModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 text-white font-sans z-50">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#111111] border border-neutral-800 p-6 rounded-3xl max-w-md w-full shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
+              <div className="flex items-center gap-3">
+                <Settings className="w-6 h-6 text-indigo-400" />
+                <div>
+                  <h3 className="text-base font-bold uppercase tracking-wider">SCREEN SETTINGS</h3>
+                  <p className="text-xs text-neutral-400 font-mono">ID: {connectedScreenId}</p>
+                </div>
+              </div>
+              <button onClick={() => setIsSettingsModalOpen(false)} className="text-neutral-400 hover:text-white text-xs font-bold px-2 py-1 bg-neutral-900 rounded-lg">
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => { setIsSettingsModalOpen(false); setIsLogsModalOpen(true); }}
+                className="w-full p-4 rounded-2xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 flex items-center justify-between transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <List className="w-5 h-5 text-indigo-400" />
+                  <div className="text-left">
+                    <div className="text-sm font-bold">View Recent Scan Logs</div>
+                    <div className="text-xs text-neutral-400">Check latest local attendance logs</div>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={handleLogoutScreen}
+                className="w-full p-4 rounded-2xl bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 flex items-center justify-between transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <LogOut className="w-5 h-5 text-red-400" />
+                  <div className="text-left">
+                    <div className="text-sm font-bold">Disconnect &amp; Logout Screen</div>
+                    <div className="text-xs text-red-400/80">Unlink from server and return to login</div>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* ─── MODAL 3: RECENT LOGS OVERLAY ─────────────────────────────────── */}
+      {isLogsModalOpen && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-6 text-white font-sans z-50">
+          <div className="bg-[#111111] border border-neutral-800 p-6 rounded-3xl max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-4 mb-4">
+              <h3 className="text-base font-bold uppercase tracking-wider flex items-center gap-2">
+                <List className="w-5 h-5 text-indigo-400" /> Recent Attendance Logs
+              </h3>
+              <button onClick={() => setIsLogsModalOpen(false)} className="text-neutral-400 hover:text-white text-xs font-bold px-3 py-1.5 bg-neutral-900 rounded-lg">
+                Close Logs
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {attendanceLogs.slice(0, 20).map((log) => (
+                <div key={log.id} className="p-3 bg-neutral-900 rounded-xl border border-neutral-800 flex items-center justify-between text-xs">
+                  <div>
+                    <div className="font-bold text-white">{log.name}</div>
+                    <div className="text-[11px] text-neutral-400 font-mono">ID: {log.studentId} · Class {log.class}-{log.section}</div>
+                  </div>
+                  <div className="text-right font-mono">
+                    <div className="text-emerald-400 font-bold">{log.formattedTime}</div>
+                    <div className="text-[10px] text-neutral-500">{log.date}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         @keyframes pulse {
           0%, 100% { opacity: 0.3; transform: scale(0.9); }
@@ -603,10 +950,15 @@ export default function ScreeningPage() {
 
 // ─── Override screen sub-components ──────────────────────────────────────────
 
-function OverrideTopBar({ time }) {
+function OverrideTopBar({ time, screenId, onOpenPin }) {
   return (
     <div className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-white/5">
-      <span className="text-[10px] tracking-[0.25em] uppercase font-semibold text-neutral-600">BIOMETRIC SYSTEM</span>
+      <div className="flex items-center gap-3">
+        <span className="text-[10px] tracking-[0.25em] uppercase font-semibold text-neutral-600">ID: {screenId || "SCREEN_01"}</span>
+        <button onClick={onOpenPin} className="p-1 rounded bg-neutral-900 text-neutral-500 hover:text-white">
+          <Settings className="w-3.5 h-3.5" />
+        </button>
+      </div>
       <span className="text-xs font-mono text-neutral-500">{time}</span>
     </div>
   );
