@@ -13,7 +13,7 @@ import {
   verifyScreenPin,
   updateScreenHeartbeat
 } from "@/lib/firebase";
-import { detectFacesInVideo, findBestMatch, drawEyeAndLandmarkMesh, loadFaceApiModels } from "@/lib/faceApi";
+import { detectFacesInVideo, findBestMatch, drawEyeAndLandmarkMesh, loadFaceApiModels, extractHeadPoseAndExpression } from "@/lib/faceApi";
 import { 
   CheckCircle2, 
   XCircle, 
@@ -35,7 +35,10 @@ import {
   Volume2,
   VolumeX,
   Volume1,
-  Mic
+  Mic,
+  Smile,
+  UserCheck,
+  Activity
 } from "lucide-react";
 import { 
   speakGreeting, 
@@ -48,7 +51,9 @@ import {
 // ─── Status theme map ─────────────────────────────────────────────────────────
 const THEMES = {
   IDLE:                     { glow: "rgba(255,255,255,0.04)", ring: "#ffffff22", label: "READY TO SCAN",      icon: null,          accent: "#ffffff33", barBg: "transparent" },
+  LIVENESS_CHALLENGE:       { glow: "rgba(255,214,0,0.22)",   ring: "#FFD600",   label: "TURN HEAD OR SMILE TO CONFIRM", icon: Smile, accent: "#FFD600", barBg: "#FFD600" },
   ATTENDANCE_MARKED:        { glow: "rgba(0,200,83,0.18)",   ring: "#00C853",   label: "ATTENDANCE MARKED",  icon: CheckCircle2,  accent: "#00C853",   barBg: "#00A82D" },
+
   ATTENDANCE_ALREADY_MARKED:{ glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "ATTENDANCE ALREADY MARKED", icon: Info,   accent: "#1E88E5",   barBg: "#1565C0" },
   NOT_IN_SET:               { glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "NOT IN ATTENDANCE SET",   icon: Info,   accent: "#1E88E5",   barBg: "#1565C0" },
   TIME_EXCEEDED:            { glow: "rgba(211,47,47,0.18)",  ring: "#D32F2F",   label: "TIME EXCEEDED",      icon: XCircle,       accent: "#D32F2F",   barBg: "#D32F2F" },
@@ -204,6 +209,25 @@ export default function ScreeningPage() {
   const [availableVoices, setAvailableVoices] = useState([]);
   const voiceConfigRef = useRef(voiceConfig);
   useEffect(() => { voiceConfigRef.current = voiceConfig; }, [voiceConfig]);
+
+  // Anti-Spoofing Head Pose & Smile Liveness State
+  const [isLivenessEnabled, setIsLivenessEnabled] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const saved = localStorage.getItem("liveness_challenge_enabled");
+    return saved !== "false";
+  });
+  const livenessEnabledRef = useRef(isLivenessEnabled);
+  useEffect(() => { livenessEnabledRef.current = isLivenessEnabled; }, [isLivenessEnabled]);
+
+  const livenessPendingMatchRef = useRef(null);
+
+  const handleToggleLiveness = (enabled) => {
+    setIsLivenessEnabled(enabled);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("liveness_challenge_enabled", enabled ? "true" : "false");
+    }
+  };
+
 
   useEffect(() => {
     const updateVoices = () => {
@@ -516,19 +540,56 @@ export default function ScreeningPage() {
                         setActiveMatch(student); 
                         triggerAudioAndVoice("TIME_EXCEEDED", student.name);
                       } else {
-                        setStatusState("ATTENDANCE_MARKED"); 
-                        setActiveMatch(student); 
-                        triggerAudioAndVoice("ATTENDANCE_MARKED", student.name);
-                        recordAttendance({ 
-                          studentId, 
-                          name: student.name, 
-                          class: student.class, 
-                          section: student.section, 
-                          group: student.group, 
-                          datasetName: matched.name || "Master List", 
-                          type: "ENTRY", 
-                          timestamp: new Date().toISOString() 
-                        }).catch(console.error);
+                        // Anti-Spoofing Head Pose & Smile Liveness Movement Check
+                        if (livenessEnabledRef.current) {
+                          const pose = extractHeadPoseAndExpression(det.landmarks);
+
+                          if (statusStateRef.current !== "LIVENESS_CHALLENGE" && statusStateRef.current !== "ATTENDANCE_MARKED") {
+                            setStatusState("LIVENESS_CHALLENGE");
+                            setActiveMatch(student);
+                            triggerAudioAndVoice("LIVENESS_CHALLENGE", student.name);
+                            livenessPendingMatchRef.current = { studentId, student, matched, startTime: now };
+                          } else if (statusStateRef.current === "LIVENESS_CHALLENGE") {
+                            if (pose.livenessDetected) {
+                              // Movement challenge satisfied! Confirm attendance
+                              setStatusState("ATTENDANCE_MARKED");
+                              currentPersonIdRef.current = studentId;
+                              triggerAudioAndVoice("ATTENDANCE_MARKED", student.name);
+                              recordAttendance({ 
+                                studentId, 
+                                name: student.name, 
+                                class: student.class, 
+                                section: student.section, 
+                                group: student.group, 
+                                datasetName: matched.name || "Master List", 
+                                type: "ENTRY", 
+                                timestamp: new Date().toISOString() 
+                              }).catch(console.error);
+                              livenessPendingMatchRef.current = null;
+                            } else if (livenessPendingMatchRef.current && (now - livenessPendingMatchRef.current.startTime > 5000)) {
+                              // Challenge timed out
+                              livenessPendingMatchRef.current = null;
+                              currentPersonIdRef.current = null;
+                              setStatusState("IDLE");
+                              setActiveMatch(null);
+                            }
+                          }
+                        } else {
+                          // Liveness disabled: Immediate Attendance Marking
+                          setStatusState("ATTENDANCE_MARKED"); 
+                          setActiveMatch(student); 
+                          triggerAudioAndVoice("ATTENDANCE_MARKED", student.name);
+                          recordAttendance({ 
+                            studentId, 
+                            name: student.name, 
+                            class: student.class, 
+                            section: student.section, 
+                            group: student.group, 
+                            datasetName: matched.name || "Master List", 
+                            type: "ENTRY", 
+                            timestamp: new Date().toISOString() 
+                          }).catch(console.error);
+                        }
                       }
                     }
                   }
@@ -545,10 +606,12 @@ export default function ScreeningPage() {
           } else {
             if (now - lastFaceSeenRef.current > 1000 && (currentPersonIdRef.current !== null || statusStateRef.current !== "IDLE")) {
               currentPersonIdRef.current = null;
+              livenessPendingMatchRef.current = null;
               setStatusState("IDLE");
               setActiveMatch(null);
             }
           }
+
         } catch (e) { 
           console.error("Detection loop error:", e); 
         } finally { 
@@ -1085,7 +1148,33 @@ export default function ScreeningPage() {
                 </div>
               </div>
 
+              {/* Anti-Spoofing Head Pose Challenge Section */}
+              <div className="p-4 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+                    <Smile className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-neutral-200">Head Pose &amp; Smile Challenge</div>
+                    <div className="text-[10px] text-neutral-400">Require subtle movement before logging</div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleLiveness(!isLivenessEnabled)}
+                  className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase transition-all ${
+                    isLivenessEnabled
+                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                      : "bg-neutral-800 text-neutral-500 border border-neutral-700"
+                  }`}
+                >
+                  {isLivenessEnabled ? "ACTIVE" : "OFF"}
+                </button>
+              </div>
+
               {/* Voice Prompts Audio Greetings Section */}
+
               <div className="p-4 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
