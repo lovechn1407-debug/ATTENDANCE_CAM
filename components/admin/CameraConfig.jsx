@@ -20,7 +20,9 @@ import {
   Trash2,
   Lock,
   CheckSquare,
-  Square
+  Square,
+  Volume2,
+  Volume1
 } from "lucide-react";
 import { 
   subscribeToScreenConfig, 
@@ -29,6 +31,13 @@ import {
   addScreen, 
   deleteScreen 
 } from "@/lib/firebase";
+import { 
+  speakGreeting, 
+  loadVoicePromptConfig, 
+  saveVoicePromptConfig, 
+  getAvailableVoices 
+} from "@/lib/voicePrompts";
+
 
 export default function CameraConfig() {
   const [videoDevices, setVideoDevices] = useState([]);
@@ -52,6 +61,22 @@ export default function CameraConfig() {
   const [selectedTargets, setSelectedTargets] = useState(["ALL"]);
   const [savingOverride, setSavingOverride] = useState(false);
   const [overrideSaved, setOverrideSaved] = useState(false);
+
+  // Voice Prompts TTS State
+  const [voiceConfig, setVoiceConfig] = useState(() => loadVoicePromptConfig());
+  const [availableVoices, setAvailableVoices] = useState([]);
+
+  useEffect(() => {
+    const updateVoices = () => {
+      const v = getAvailableVoices();
+      setAvailableVoices(v);
+    };
+    updateVoices();
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+  }, []);
+
 
   const previewVideoRef = useRef(null);
 
@@ -140,9 +165,11 @@ export default function CameraConfig() {
   const handleSaveConfig = () => {
     localStorage.setItem("preferred_camera_device_id", selectedDeviceId);
     localStorage.setItem("face_match_threshold", matchThreshold.toString());
+    saveVoicePromptConfig(voiceConfig);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
   };
+
 
   const handleToggleTarget = (screenId) => {
     if (screenId === "ALL") {
@@ -624,6 +651,71 @@ export default function CameraConfig() {
               <span>0.65 (Loose Match)</span>
             </div>
           </div>
+
+          {/* Voice Prompts Configuration Section */}
+          <div className="space-y-3 pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <Volume2 className="w-4 h-4 text-indigo-600" /> Kiosk Voice Greetings &amp; Audio Prompts
+              </label>
+              <button
+                type="button"
+                onClick={() => setVoiceConfig({ ...voiceConfig, enabled: !voiceConfig.enabled })}
+                className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase transition-all ${
+                  voiceConfig.enabled
+                    ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                    : "bg-slate-100 text-slate-500 border border-slate-200"
+                }`}
+              >
+                {voiceConfig.enabled ? "ENABLED" : "MUTED"}
+              </button>
+            </div>
+
+            {voiceConfig.enabled && (
+              <div className="space-y-3 pt-2 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-700">Greeting Style</span>
+                  <select
+                    value={voiceConfig.style || "friendly"}
+                    onChange={(e) => setVoiceConfig({ ...voiceConfig, style: e.target.value })}
+                    className="bg-white border border-slate-200 text-slate-800 text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  >
+                    <option value="friendly">Friendly ("Welcome back!")</option>
+                    <option value="formal">Formal ("Attendance recorded")</option>
+                    <option value="brief">Brief ("Welcome")</option>
+                  </select>
+                </div>
+
+                {availableVoices.length > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-700">Synthesized Voice</span>
+                    <select
+                      value={voiceConfig.voiceURI || ""}
+                      onChange={(e) => setVoiceConfig({ ...voiceConfig, voiceURI: e.target.value })}
+                      className="bg-white border border-slate-200 text-slate-800 text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 max-w-[200px] truncate"
+                    >
+                      <option value="">Default System Voice</option>
+                      {availableVoices.map((v) => (
+                        <option key={v.voiceURI} value={v.voiceURI}>
+                          {v.name} ({v.lang})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => speakGreeting("ATTENDANCE_MARKED", "Alex Johnson", voiceConfig)}
+                  className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 transition-all active:scale-98"
+                >
+                  <Volume1 className="w-4 h-4 text-indigo-600" />
+                  <span>Test Voice Greeting Audio</span>
+                </button>
+              </div>
+            )}
+          </div>
+
 
           {/* Save Action */}
           <div className="pt-4 flex items-center justify-between border-t border-slate-100">
