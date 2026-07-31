@@ -31,8 +31,19 @@ import {
   Calendar, 
   Clock,
   Maximize,
-  Minimize
+  Minimize,
+  Volume2,
+  VolumeX,
+  Volume1,
+  Mic
 } from "lucide-react";
+import { 
+  speakGreeting, 
+  loadVoicePromptConfig, 
+  saveVoicePromptConfig, 
+  getAvailableVoices 
+} from "@/lib/voicePrompts";
+
 
 // ─── Status theme map ─────────────────────────────────────────────────────────
 const THEMES = {
@@ -188,7 +199,29 @@ export default function ScreeningPage() {
     }
   };
 
-  // ─── Audio ────────────────────────────────────────────────────────────────
+  // Voice Prompts TTS Configuration State
+  const [voiceConfig, setVoiceConfig] = useState(() => loadVoicePromptConfig());
+  const [availableVoices, setAvailableVoices] = useState([]);
+  const voiceConfigRef = useRef(voiceConfig);
+  useEffect(() => { voiceConfigRef.current = voiceConfig; }, [voiceConfig]);
+
+  useEffect(() => {
+    const updateVoices = () => {
+      const v = getAvailableVoices();
+      setAvailableVoices(v);
+    };
+    updateVoices();
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+  }, []);
+
+  const handleUpdateVoiceConfig = (newCfg) => {
+    setVoiceConfig(newCfg);
+    saveVoicePromptConfig(newCfg);
+  };
+
+  // ─── Audio & Voice Prompt Trigger ──────────────────────────────────────────
   const playStateAudio = useCallback((state) => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -220,6 +253,12 @@ export default function ScreeningPage() {
       osc.start(now); osc.stop(now + 0.5);
     } catch {}
   }, []);
+
+  const triggerAudioAndVoice = useCallback((state, studentName = "") => {
+    playStateAudio(state);
+    speakGreeting(state, studentName, voiceConfigRef.current);
+  }, [playStateAudio]);
+
 
   // ─── Firebase + Clock + Available Screens Subscription ────────────────────
   useEffect(() => {
@@ -437,7 +476,7 @@ export default function ScreeningPage() {
                 if (student.suspended || student.isSuspended) {
                   setStatusState("SUSPENDED"); 
                   setActiveMatch(student); 
-                  playStateAudio("SUSPENDED");
+                  triggerAudioAndVoice("SUSPENDED", student.name);
                 } else {
                   const ds = activeDatasetsRef.current;
                   const matched = ds.length > 0 ? ds.find((d) => {
@@ -453,7 +492,7 @@ export default function ScreeningPage() {
                   if (!matched) {
                     setStatusState("NOT_IN_SET"); 
                     setActiveMatch(student); 
-                    playStateAudio("NOT_IN_SET");
+                    triggerAudioAndVoice("NOT_IN_SET", student.name);
                   } else {
                     const today = new Date().toISOString().split("T")[0];
                     const already = attendanceLogsRef.current.find(
@@ -464,7 +503,7 @@ export default function ScreeningPage() {
                       setStatusState("ATTENDANCE_ALREADY_MARKED"); 
                       setActiveMatch(student);
                       if (already.formattedTime) setMatchTimestamp(already.formattedTime);
-                      playStateAudio("ATTENDANCE_ALREADY_MARKED");
+                      triggerAudioAndVoice("ATTENDANCE_ALREADY_MARKED", student.name);
                     } else {
                       let late = false;
                       if (matched.timing?.maxEntryTime) {
@@ -475,11 +514,11 @@ export default function ScreeningPage() {
                       if (late) {
                         setStatusState("TIME_EXCEEDED"); 
                         setActiveMatch(student); 
-                        playStateAudio("TIME_EXCEEDED");
+                        triggerAudioAndVoice("TIME_EXCEEDED", student.name);
                       } else {
                         setStatusState("ATTENDANCE_MARKED"); 
                         setActiveMatch(student); 
-                        playStateAudio("ATTENDANCE_MARKED");
+                        triggerAudioAndVoice("ATTENDANCE_MARKED", student.name);
                         recordAttendance({ 
                           studentId, 
                           name: student.name, 
@@ -500,7 +539,7 @@ export default function ScreeningPage() {
                 currentPersonIdRef.current = "UNKNOWN";
                 setStatusState("FAILED_TO_RECOGNISE");
                 setActiveMatch(null);
-                playStateAudio("FAILED_TO_RECOGNISE");
+                triggerAudioAndVoice("FAILED_TO_RECOGNISE", "");
               }
             }
           } else {
@@ -1045,6 +1084,114 @@ export default function ScreeningPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Voice Prompts Audio Greetings Section */}
+              <div className="p-4 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-emerald-400" />
+                    <div>
+                      <div className="text-xs font-bold text-neutral-200">Voice Prompts &amp; Audio Greetings</div>
+                      <div className="text-[10px] text-neutral-400">Spoken greetings on biometric match</div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateVoiceConfig({ ...voiceConfig, enabled: !voiceConfig.enabled })}
+                    className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase transition-all ${
+                      voiceConfig.enabled
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                        : "bg-neutral-800 text-neutral-500 border border-neutral-700"
+                    }`}
+                  >
+                    {voiceConfig.enabled ? "ENABLED" : "MUTED"}
+                  </button>
+                </div>
+
+                {voiceConfig.enabled && (
+                  <div className="space-y-3 pt-2 border-t border-neutral-800/80">
+                    {/* Greeting Style */}
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-[11px] font-semibold text-neutral-400 shrink-0">Greeting Style</label>
+                      <select
+                        value={voiceConfig.style || "friendly"}
+                        onChange={(e) => handleUpdateVoiceConfig({ ...voiceConfig, style: e.target.value })}
+                        className="bg-neutral-800 border border-neutral-700 text-neutral-200 text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:border-indigo-500 shrink min-w-0"
+                      >
+                        <option value="friendly">Friendly ("Welcome back!")</option>
+                        <option value="formal">Formal ("Attendance recorded")</option>
+                        <option value="brief">Brief ("Welcome")</option>
+                      </select>
+                    </div>
+
+                    {/* Voice Synthesis Selector */}
+                    {availableVoices.length > 0 && (
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-[11px] font-semibold text-neutral-400 shrink-0">Voice</label>
+                        <select
+                          value={voiceConfig.voiceURI || ""}
+                          onChange={(e) => handleUpdateVoiceConfig({ ...voiceConfig, voiceURI: e.target.value })}
+                          className="bg-neutral-800 border border-neutral-700 text-neutral-200 text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:border-indigo-500 max-w-[200px] truncate shrink"
+                        >
+                          <option value="">Default System Voice</option>
+                          {availableVoices.map((v) => (
+                            <option key={v.voiceURI} value={v.voiceURI}>
+                              {v.name} ({v.lang})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Speed & Volume Sliders */}
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <div className="flex justify-between text-[10px] text-neutral-400 mb-1">
+                          <span>Speech Speed</span>
+                          <span>{parseFloat(voiceConfig.rate || 1).toFixed(1)}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.6"
+                          max="1.4"
+                          step="0.1"
+                          value={voiceConfig.rate || 1}
+                          onChange={(e) => handleUpdateVoiceConfig({ ...voiceConfig, rate: parseFloat(e.target.value) })}
+                          className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between text-[10px] text-neutral-400 mb-1">
+                          <span>Volume</span>
+                          <span>{Math.round((voiceConfig.volume || 1) * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.1"
+                          max="1.0"
+                          step="0.1"
+                          value={voiceConfig.volume || 1}
+                          onChange={(e) => handleUpdateVoiceConfig({ ...voiceConfig, volume: parseFloat(e.target.value) })}
+                          className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Test Sample Button */}
+                    <button
+                      type="button"
+                      onClick={() => triggerAudioAndVoice("ATTENDANCE_MARKED", "Alex Johnson")}
+                      className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-98"
+                    >
+                      <Volume1 className="w-4 h-4" />
+                      <span>Test Voice Greeting Sample</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
 
               {/* Toggle Fullscreen Mode Option */}
               <button
