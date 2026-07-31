@@ -22,7 +22,8 @@ import {
   CheckSquare,
   Square,
   Volume2,
-  Volume1
+  Volume1,
+  Smile
 } from "lucide-react";
 import { 
   subscribeToScreenConfig, 
@@ -46,6 +47,20 @@ export default function CameraConfig() {
   const [isSaved, setIsSaved] = useState(false);
   const [cameraStream, setCameraStream] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Anti-Spoofing & Liveness Movement Challenge State
+  const [isLivenessEnabled, setIsLivenessEnabled] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const saved = localStorage.getItem("liveness_challenge_enabled");
+    return saved !== "false";
+  });
+
+  const handleToggleLivenessConfig = (enabled) => {
+    setIsLivenessEnabled(enabled);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("liveness_challenge_enabled", enabled ? "true" : "false");
+    }
+  };
 
   // Screen Connection Authorization System State
   const [screensList, setScreensList] = useState([]);
@@ -652,7 +667,31 @@ export default function CameraConfig() {
             </div>
           </div>
 
+          {/* Anti-Spoofing & Liveness Challenge Section */}
+          <div className="space-y-3 pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Smile className="w-4 h-4 text-amber-600" /> Head Pose &amp; Smile Liveness Challenge
+                </label>
+                <p className="text-[11px] text-slate-400">Require subtle head movement or smile before logging</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleToggleLivenessConfig(!isLivenessEnabled)}
+                className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase transition-all ${
+                  isLivenessEnabled
+                    ? "bg-amber-100 text-amber-800 border border-amber-300"
+                    : "bg-slate-100 text-slate-500 border border-slate-200"
+                }`}
+              >
+                {isLivenessEnabled ? "ACTIVE" : "OFF"}
+              </button>
+            </div>
+          </div>
+
           {/* Voice Prompts Configuration Section */}
+
           <div className="space-y-3 pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
