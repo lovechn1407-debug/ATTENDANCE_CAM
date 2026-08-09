@@ -598,32 +598,32 @@ export default function StaffPanelPage() {
               </div>
             </div>
 
-            {/* DYNAMIC DATE PICKER STRIP WITH COLOR-CODED CIRCLES (RED TO GREEN) */}
+            {/* FLIGHT-BOOKING STYLE DYNAMIC DATE PICKER STRIP WITH CIRCULAR DAY CELLS & RATES */}
             <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <CalendarIcon className="w-4 h-4 text-indigo-600" /> Dynamic Attendance Dates
+                    <CalendarIcon className="w-4 h-4 text-indigo-600" /> Attendance Health Calendar
                   </h3>
                   {/* Color Legend */}
-                  <div className="hidden sm:flex items-center gap-3 text-[10px] font-bold text-slate-500 pl-4 border-l border-slate-200">
+                  <div className="hidden sm:flex items-center gap-3 text-[10px] font-bold text-slate-500 pl-3 border-l border-slate-200">
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> ≥80% High</span>
-                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> 50%-79% Moderate</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> 50%-79% Mod</span>
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> &lt;50% Low</span>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setIsCalendarOpen(true)}
-                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl border border-indigo-200 flex items-center gap-1.5 transition-all"
+                  className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full border border-indigo-200 flex items-center gap-1.5 transition-all shadow-2xs"
                 >
                   <CalendarIcon className="w-3.5 h-3.5" />
-                  <span>Full Month Calendar</span>
+                  <span>Calendar View</span>
                 </button>
               </div>
 
-              {/* 7-Day Date Strip with Dynamic Color Circles */}
-              <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+              {/* 7-Day Date Strip — Circular Day Buttons (Flight Booking Style) */}
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none justify-between">
                 {last7Days.map((dateStr) => {
                   const isSelected = dateStr === selectedDate;
                   const colorInfo = dateColorMap[dateStr];
@@ -636,28 +636,25 @@ export default function StaffPanelPage() {
                     <button
                       key={dateStr}
                       onClick={() => setSelectedDate(dateStr)}
-                      className={`p-2 sm:p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-between gap-1 relative overflow-hidden ${
+                      className={`w-14 h-16 sm:w-16 sm:h-20 rounded-full border text-center transition-all flex flex-col items-center justify-center shrink-0 space-y-0.5 relative ${
                         isSelected
-                          ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200"
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200 scale-105"
                           : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800"
                       }`}
                     >
-                      <span className={`text-[10px] font-bold uppercase ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
+                      <span className={`text-[9px] sm:text-[10px] font-bold uppercase ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
                         {dayName}
                       </span>
-                      <span className="text-sm sm:text-base font-black">{dayNum}</span>
+                      <span className="text-sm sm:text-base font-black leading-none">{dayNum}</span>
 
-                      {/* DYNAMIC COLOR INDICATOR CIRCLE (RED / AMBER / GREEN) */}
-                      <div className="flex items-center gap-1 mt-0.5">
+                      {/* Flight Rate Style Percentage & Colored Circle Dot */}
+                      <div className="flex items-center gap-1 mt-1">
                         <span
-                          className={`w-2.5 h-2.5 rounded-full ${circleColor} ${isSelected ? "ring-2 ring-white" : ""}`}
-                          title={colorInfo ? `${colorInfo.pct}% Present` : "No logs"}
+                          className={`w-2 h-2 rounded-full ${circleColor} ${isSelected ? "ring-2 ring-white" : ""}`}
                         />
-                        {colorInfo && (
-                          <span className={`text-[9px] font-mono font-bold ${isSelected ? "text-white" : colorInfo.textClass}`}>
-                            {colorInfo.pct}%
-                          </span>
-                        )}
+                        <span className={`text-[8px] sm:text-[9px] font-mono font-bold leading-none ${isSelected ? "text-white" : colorInfo ? colorInfo.textClass : "text-slate-400"}`}>
+                          {colorInfo ? `${colorInfo.pct}%` : "0%"}
+                        </span>
                       </div>
                     </button>
                   );
@@ -1096,11 +1093,11 @@ export default function StaffPanelPage() {
               ))}
             </div>
 
-            {/* Month Calendar Grid */}
-            <div className="grid grid-cols-7 gap-1.5">
+            {/* Month Calendar Grid — Flight Booking Circular Day Buttons */}
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 justify-items-center">
               {calendarDays.map((dateStr, index) => {
                 if (!dateStr) {
-                  return <div key={`empty-${index}`} className="h-12" />;
+                  return <div key={`empty-${index}`} className="w-10 h-14 sm:w-12 sm:h-16" />;
                 }
 
                 const dayNum = new Date(dateStr).getDate();
@@ -1115,22 +1112,20 @@ export default function StaffPanelPage() {
                       setSelectedDate(dateStr);
                       setIsCalendarOpen(false);
                     }}
-                    className={`h-12 rounded-xl border flex flex-col items-center justify-center relative transition-all ${
+                    className={`w-10 h-14 sm:w-12 sm:h-16 rounded-2xl border flex flex-col items-center justify-center relative transition-all ${
                       isSelected
-                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200 font-bold"
-                        : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800"
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200 scale-105 font-bold"
+                        : "bg-slate-50 hover:bg-indigo-50/60 border-slate-200 text-slate-800"
                     }`}
                   >
-                    <span className="text-xs">{dayNum}</span>
+                    <span className="text-xs sm:text-sm font-black leading-none">{dayNum}</span>
 
-                    {/* DYNAMIC COLOR INDICATOR CIRCLE */}
-                    <div className="flex items-center gap-0.5 mt-0.5">
-                      <span className={`w-2 h-2 rounded-full ${circleColor}`} />
-                      {colorInfo && (
-                        <span className={`text-[8px] font-mono ${isSelected ? "text-white" : colorInfo.textClass}`}>
-                          {colorInfo.pct}%
-                        </span>
-                      )}
+                    {/* Flight Rate Style Attendance Percentage & Colored Indicator Ring/Dot */}
+                    <div className="flex items-center gap-0.5 mt-1">
+                      <span className={`w-2 h-2 rounded-full ${circleColor} ${isSelected ? "ring-1 ring-white" : ""}`} />
+                      <span className={`text-[8px] font-mono font-bold leading-none ${isSelected ? "text-white" : colorInfo ? colorInfo.textClass : "text-slate-400"}`}>
+                        {colorInfo ? `${colorInfo.pct}%` : "0%"}
+                      </span>
                     </div>
                   </button>
                 );
