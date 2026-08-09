@@ -13,7 +13,7 @@ import {
   verifyScreenPin,
   updateScreenHeartbeat
 } from "@/lib/firebase";
-import { detectFacesInVideo, findBestMatch, drawEyeAndLandmarkMesh, loadFaceApiModels, analyzeLivenessPose } from "@/lib/faceApi";
+import { detectFacesInVideo, findBestMatch, drawEyeAndLandmarkMesh, loadFaceApiModels, analyzeLivenessPose, checkFaceVisibility, detectAntiSpoofing } from "@/lib/faceApi";
 import { 
   CheckCircle2, 
   XCircle, 
@@ -35,19 +35,23 @@ import {
   Smile,
   Undo2,
   Redo2,
-  ShieldCheck
+  ShieldCheck,
+  AlertOctagon,
+  Crosshair
 } from "lucide-react";
 
 // ─── Status theme map ─────────────────────────────────────────────────────────
 const THEMES = {
-  IDLE:                     { glow: "rgba(255,255,255,0.04)", ring: "#ffffff22", label: "READY TO SCAN",      icon: null,          accent: "#ffffff33", barBg: "transparent" },
-  VERIFYING_LIVENESS:       { glow: "rgba(255,160,0,0.25)",   ring: "#FFB300",   label: "VERIFYING LIVENESS",  icon: ShieldCheck,   accent: "#FFB300",   barBg: "#FF8F00" },
-  ATTENDANCE_MARKED:        { glow: "rgba(0,200,83,0.18)",   ring: "#00C853",   label: "ATTENDANCE MARKED",  icon: CheckCircle2,  accent: "#00C853",   barBg: "#00A82D" },
-  ATTENDANCE_ALREADY_MARKED:{ glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "ATTENDANCE ALREADY MARKED", icon: Info,   accent: "#1E88E5",   barBg: "#1565C0" },
-  NOT_IN_SET:               { glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "NOT IN ATTENDANCE SET",   icon: Info,   accent: "#1E88E5",   barBg: "#1565C0" },
-  TIME_EXCEEDED:            { glow: "rgba(211,47,47,0.18)",  ring: "#D32F2F",   label: "TIME EXCEEDED",      icon: XCircle,       accent: "#D32F2F",   barBg: "#D32F2F" },
-  SUSPENDED:                { glow: "rgba(211,47,47,0.18)",  ring: "#D32F2F",   label: "SUSPENDED",          icon: XCircle,       accent: "#D32F2F",   barBg: "#D32F2F" },
-  FAILED_TO_RECOGNISE:      { glow: "rgba(255,109,0,0.18)",  ring: "#FF6D00",   label: "FAILED TO RECOGNISE", icon: XCircle,      accent: "#FF6D00",   barBg: "#FF6D00" },
+  IDLE:                     { glow: "rgba(255,255,255,0.04)", ring: "#ffffff22", label: "READY TO SCAN",           icon: null,           accent: "#ffffff33", barBg: "transparent" },
+  VERIFYING_LIVENESS:       { glow: "rgba(255,160,0,0.25)",   ring: "#FFB300",   label: "VERIFYING LIVENESS",      icon: ShieldCheck,    accent: "#FFB300",   barBg: "#FF8F00" },
+  ATTENDANCE_MARKED:        { glow: "rgba(0,200,83,0.18)",   ring: "#00C853",   label: "ATTENDANCE MARKED",       icon: CheckCircle2,   accent: "#00C853",   barBg: "#00A82D" },
+  ATTENDANCE_ALREADY_MARKED:{ glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "ATTENDANCE ALREADY MARKED",icon: Info,           accent: "#1E88E5",   barBg: "#1565C0" },
+  NOT_IN_SET:               { glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "NOT IN ATTENDANCE SET",   icon: Info,           accent: "#1E88E5",   barBg: "#1565C0" },
+  TIME_EXCEEDED:            { glow: "rgba(211,47,47,0.18)",  ring: "#D32F2F",   label: "TIME EXCEEDED",           icon: XCircle,        accent: "#D32F2F",   barBg: "#D32F2F" },
+  SUSPENDED:                { glow: "rgba(211,47,47,0.18)",  ring: "#D32F2F",   label: "SUSPENDED",               icon: XCircle,        accent: "#D32F2F",   barBg: "#D32F2F" },
+  FAILED_TO_RECOGNISE:      { glow: "rgba(255,109,0,0.18)",  ring: "#FF6D00",   label: "FAILED TO RECOGNISE",     icon: XCircle,        accent: "#FF6D00",   barBg: "#FF6D00" },
+  ALIGN_FACE:               { glow: "rgba(255,160,0,0.22)",  ring: "#FF8F00",   label: "ALIGN FACE TO CENTER",    icon: Crosshair,      accent: "#FF8F00",   barBg: "#E65100" },
+  PROXY_DETECTED:           { glow: "rgba(183,28,28,0.45)",  ring: "#B71C1C",   label: "PROXY ATTENDANCE DETECTED",icon: AlertOctagon,  accent: "#F44336",   barBg: "#B71C1C" },
 };
 
 const CIRCLE_SIZE = 300; // px
@@ -105,6 +109,7 @@ export default function ScreeningPage() {
   const [currentDate, setCurrentDate] = useState("");
   const [isModelsLoaded, setIsModelsLoaded] = useState(false);
   const [statusState, setStatusState] = useState("IDLE");
+  const [proxyReason, setProxyReason] = useState(""); // 'phone' | 'printout' | 'screen'
   const [activeMatch, setActiveMatch] = useState(null);
   const [matchTimestamp, setMatchTimestamp] = useState("");
   const [updateProgress, setUpdateProgress] = useState(0);
@@ -147,6 +152,9 @@ export default function ScreeningPage() {
   const scanLineRef = useRef(null);
   const currentPersonIdRef = useRef(null);
   const lastFaceSeenRef = useRef(0);
+  const partialFaceStartRef = useRef(null); // timestamp when face first became partially out-of-frame
+  const lastProxyCheckRef   = useRef(0);    // timestamp of last anti-spoof check
+  const proxyVotesRef       = useRef(0);    // consecutive proxy detections counter
 
   // Live refs so detection loop doesn't recreate
   const studentsRef = useRef([]);
@@ -446,6 +454,59 @@ export default function ScreeningPage() {
           if (detections.length > 0) {
             lastFaceSeenRef.current = now;
             const det = detections[0];
+            const video = videoRef.current;
+
+            // ── 1. FACE VISIBILITY GATE ────────────────────────────────────────────
+            // Don't run any recognition until the face is fully in frame.
+            const { isFullyVisible } = checkFaceVisibility(det, video.videoWidth, video.videoHeight);
+
+            if (!isFullyVisible) {
+              // Start or continue the partial-visibility timer
+              if (partialFaceStartRef.current === null) {
+                partialFaceStartRef.current = now;
+              }
+              // After 5 seconds → prompt the student to align
+              if (now - partialFaceStartRef.current > 5000 && statusStateRef.current !== "ALIGN_FACE" && statusStateRef.current !== "PROXY_DETECTED") {
+                currentPersonIdRef.current = null;
+                setStatusState("ALIGN_FACE");
+                setActiveMatch(null);
+                setActiveChallenge(null);
+                pendingMatchedStudentRef.current = null;
+              }
+              // Skip recognition this frame — face not fully visible
+            } else {
+              // Face is fully visible — reset partial timer
+              partialFaceStartRef.current = null;
+              if (statusStateRef.current === "ALIGN_FACE") {
+                currentPersonIdRef.current = null;
+                setStatusState("IDLE");
+              }
+
+              // ── 2. ANTI-SPOOFING CHECK (throttled to every 2 seconds) ───────────
+              // Run BEFORE recognition so proxies never touch the identity flow.
+              if (now - lastProxyCheckRef.current > 2000 && statusStateRef.current !== "PROXY_DETECTED") {
+                lastProxyCheckRef.current = now;
+                const spoofResult = detectAntiSpoofing(det, video);
+                if (spoofResult.isProxy) {
+                  proxyVotesRef.current = Math.min(proxyVotesRef.current + 1, 5);
+                } else {
+                  proxyVotesRef.current = Math.max(proxyVotesRef.current - 1, 0);
+                }
+                if (proxyVotesRef.current >= 2) {
+                  currentPersonIdRef.current = null;
+                  setStatusState("PROXY_DETECTED");
+                  setProxyReason(spoofResult.reason);
+                  setActiveMatch(null);
+                  setActiveChallenge(null);
+                  pendingMatchedStudentRef.current = null;
+                  playStateAudio("FAILED_TO_RECOGNISE"); // use error tone
+                }
+              }
+
+              // If proxy was just flagged this frame, skip recognition
+              if (statusStateRef.current === "PROXY_DETECTED") {
+                // stay in proxy warning, nothing else to do
+              } else {
 
             // ── LIVENESS MODE: skip all face recognition, only track pose/expression ──
             // This is critical: a turned head gives a bad descriptor that fails recognition,
@@ -605,10 +666,14 @@ export default function ScreeningPage() {
                   playStateAudio("FAILED_TO_RECOGNISE");
                 }
               }
-            }
+              }
+            } // end: if statusState !== PROXY_DETECTED
+            }   // end: if isFullyVisible
 
           } else {
-            // No face detected
+
+            // No face detected — reset partial-face timer
+            partialFaceStartRef.current = null;
             // Use a longer grace period during liveness challenge so a brief tracking
             // loss from head turn doesn't abort the challenge prematurely.
             const gracePeriod = statusStateRef.current === "VERIFYING_LIVENESS" ? 4000 : 1200;
@@ -863,6 +928,63 @@ export default function ScreeningPage() {
                   )}
                 </AnimatePresence>
 
+                {/* ─── ALIGN FACE OVERLAY ─────────────────────────────────────────── */}
+                <AnimatePresence>
+                  {statusState === "ALIGN_FACE" && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      className="absolute inset-0 bg-amber-950/75 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 space-y-3"
+                    >
+                      {/* Animated alignment crosshair */}
+                      <div className="relative w-20 h-20 flex items-center justify-center">
+                        <div className="absolute inset-0 rounded-full border-2 border-amber-400/40 animate-ping" />
+                        <div className="w-16 h-16 rounded-full border-2 border-amber-400 bg-amber-500/10 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                          <Crosshair className="w-9 h-9 text-amber-300" />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="block text-[11px] font-black tracking-widest text-amber-300 uppercase">
+                          ALIGN FACE
+                        </span>
+                        <span className="block text-[9px] text-amber-400/80 font-semibold tracking-wider uppercase">
+                          Step back · Center in frame
+                        </span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* ─── PROXY DETECTED OVERLAY ─────────────────────────────────────── */}
+                <AnimatePresence>
+                  {statusState === "PROXY_DETECTED" && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.88 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 bg-red-950/90 backdrop-blur-sm flex flex-col items-center justify-center p-3 text-center z-30 space-y-2"
+                    >
+                      <div className="relative w-18 h-18 flex items-center justify-center">
+                        <div className="absolute inset-0 rounded-full border-2 border-red-500/50 animate-ping" style={{ animationDuration: "0.8s" }} />
+                        <div className="w-16 h-16 rounded-full border-2 border-red-500 bg-red-500/15 flex items-center justify-center shadow-xl shadow-red-500/40">
+                          <AlertOctagon className="w-9 h-9 text-red-400" />
+                        </div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="block text-[10px] font-black tracking-widest text-red-300 uppercase">
+                          PROXY DETECTED
+                        </span>
+                        <span className="block text-[9px] text-red-400/70 font-semibold uppercase tracking-wide">
+                          {proxyReason === "phone" && "📱 Phone Screen"}
+                          {proxyReason === "printout" && "🖨 Printed Photo"}
+                          {proxyReason === "screen" && "🖥 Display Screen"}
+                        </span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 {/* Idle scan line sweep */}
                 {!isActive && (
                   <div
@@ -928,7 +1050,27 @@ export default function ScreeningPage() {
             {/* === FULL RECTANGLE BACKGROUND STATUS BANNER (with shimmer effect) === */}
             <div className="w-full min-h-[52px] flex items-center shrink-0 mt-4">
               <AnimatePresence mode="wait">
-                {isActive ? (
+                {isActive && statusState === "PROXY_DETECTED" ? (
+                  <motion.div
+                    key="proxy"
+                    initial={{ y: 12, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -8, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="w-full py-4 px-4 bg-[#B71C1C] shadow-2xl shadow-red-900/60 space-y-1"
+                  >
+                    <div className="flex items-center justify-center gap-2 text-white font-black text-sm tracking-widest uppercase">
+                      <AlertOctagon className="w-5 h-5 text-red-200 shrink-0 animate-pulse" />
+                      <span>PROXY ATTENDANCE DETECTED</span>
+                    </div>
+                    <p className="text-center text-[10px] text-red-200/80 font-semibold tracking-wider">
+                      ⚠ Violation of attendance policy. This attempt has been flagged.
+                    </p>
+                    <p className="text-center text-[10px] text-red-300 font-black tracking-widest uppercase">
+                      Continued violations may result in SUSPENSION.
+                    </p>
+                  </motion.div>
+                ) : isActive ? (
                   <motion.div
                     key={statusState}
                     initial={{ y: 12, opacity: 0 }}
@@ -951,6 +1093,7 @@ export default function ScreeningPage() {
                       {theme.label}
                     </span>
                   </motion.div>
+
                 ) : (
                   <motion.div
                     key="idle"
