@@ -22,13 +22,14 @@ import {
   User, 
   Lock, 
   Key, 
-  RefreshCw, 
   Sparkles, 
   ShieldCheck, 
-  CheckSquare, 
   AlertCircle,
   ChevronRight,
-  Edit3
+  Check,
+  X,
+  SlidersHorizontal,
+  Users
 } from "lucide-react";
 
 export default function StaffPanelPage() {
@@ -180,7 +181,7 @@ export default function StaffPanelPage() {
         datasetName: dsName
       });
 
-      showToast(`Marked ${sName} as ${targetStatus} for ${selectedDate}`);
+      showToast(`Marked ${sName} as ${targetStatus}`);
     } catch (err) {
       alert(`Failed to update attendance: ` + err.message);
     }
@@ -239,40 +240,37 @@ export default function StaffPanelPage() {
 
   const absentCount = datasetStudents.length - presentCount;
 
-  // ─── LOGIN VIEW ───────────────────────────────────────────────────────────
+  // ─── LIGHT THEME LOGIN VIEW ───────────────────────────────────────────────
   if (!currentStaff) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 font-sans text-slate-100 relative overflow-hidden">
-        {/* Background Decorative Glow */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
-
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans text-slate-900 relative">
         <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-slate-800/90 border border-slate-700/80 p-8 rounded-3xl max-w-md w-full shadow-2xl space-y-6 relative z-10 backdrop-blur-md"
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white border border-slate-200 p-8 rounded-3xl max-w-md w-full shadow-xl space-y-6 relative z-10"
         >
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/10">
-              <UserCheck className="w-8 h-8" />
+            <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-md shadow-indigo-200">
+              <UserCheck className="w-7 h-7" />
             </div>
-            <h1 className="text-2xl font-black tracking-tight text-white uppercase">
-              Staff Portal
+            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
+              BioAttend Staff Portal
             </h1>
-            <p className="text-xs text-slate-400 font-medium">
-              Enter authorized Staff ID &amp; Password to view &amp; edit student attendance.
+            <p className="text-xs text-slate-500 font-medium">
+              Log in with Staff ID &amp; password to manage attendance datasets.
             </p>
           </div>
 
           {loginError && (
-            <div className="p-3 bg-red-950/80 border border-red-500/50 rounded-xl text-red-300 text-xs font-semibold text-center flex items-center justify-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-semibold text-center flex items-center justify-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
               <span>{loginError}</span>
             </div>
           )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Staff ID
               </label>
               <div className="relative">
@@ -283,13 +281,13 @@ export default function StaffPanelPage() {
                   placeholder="e.g. STAFF01"
                   value={inputStaffId}
                   onChange={(e) => setInputStaffId(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-sm font-mono font-bold text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Password
               </label>
               <div className="relative">
@@ -300,7 +298,7 @@ export default function StaffPanelPage() {
                   placeholder="••••••••"
                   value={inputPassword}
                   onChange={(e) => setInputPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-sm font-mono font-bold text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
               </div>
             </div>
@@ -308,7 +306,7 @@ export default function StaffPanelPage() {
             <button
               type="submit"
               disabled={isLoggingIn}
-              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-600/30 transition-all disabled:opacity-50 mt-2"
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm uppercase tracking-wider rounded-xl shadow-md shadow-indigo-200 transition-all disabled:opacity-50 mt-2"
             >
               {isLoggingIn ? "Authenticating..." : "Login to Staff Panel"}
             </button>
@@ -318,9 +316,9 @@ export default function StaffPanelPage() {
     );
   }
 
-  // ─── DASHBOARD VIEW ───────────────────────────────────────────────────────
+  // ─── LIGHT THEME DASHBOARD VIEW ───────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMsg && (
@@ -328,81 +326,81 @@ export default function StaffPanelPage() {
             initial={{ y: -50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -50, opacity: 0 }}
-            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-bold text-xs shadow-2xl flex items-center gap-2 border border-emerald-400/40"
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-2.5 rounded-2xl font-bold text-xs shadow-xl flex items-center gap-2 border border-slate-700"
           >
-            <CheckCircle2 className="w-4 h-4 text-white" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <span>{toastMsg}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Top Header Bar */}
-      <header className="bg-slate-800/90 border-b border-slate-700/80 px-6 py-3.5 sticky top-0 z-30 flex items-center justify-between backdrop-blur-md">
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-3.5 sticky top-0 z-30 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-500/20">
+          <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-200">
             <UserCheck className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-extrabold text-white text-base tracking-tight leading-tight">
-              BioAttend Staff Panel
+            <h1 className="font-extrabold text-slate-900 text-base sm:text-lg tracking-tight leading-tight">
+              Staff Portal
             </h1>
-            <span className="text-xs text-indigo-400 font-mono font-semibold flex items-center gap-1">
-              <span>Staff ID:</span>
-              <span>{currentStaff.staffId || currentStaff.id}</span>
-              <span className="text-slate-500">•</span>
-              <span className="text-slate-300 font-sans">{currentStaff.name}</span>
+            <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
+              <span className="font-bold text-indigo-600">ID: {currentStaff.staffId || currentStaff.id}</span>
+              <span>•</span>
+              <span className="truncate max-w-[120px] sm:max-w-none">{currentStaff.name}</span>
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/80 rounded-xl text-slate-300 font-mono text-xs font-semibold border border-slate-700">
-            <Clock className="w-3.5 h-3.5 text-indigo-400" />
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-xl text-slate-700 font-mono text-xs font-semibold border border-slate-200">
+            <Clock className="w-3.5 h-3.5 text-indigo-600" />
             <span>{currentTime || "00:00:00 AM"}</span>
           </div>
 
           <button
             onClick={handleLogout}
-            className="px-3.5 py-2 bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold rounded-xl border border-slate-600 flex items-center gap-2 transition-all"
+            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center gap-1.5 transition-all"
           >
-            <LogOut className="w-3.5 h-3.5 text-slate-400" />
-            <span className="hidden sm:inline">Logout</span>
+            <LogOut className="w-3.5 h-3.5 text-slate-500" />
+            <span>Logout</span>
           </button>
         </div>
       </header>
 
-      {/* Main Body */}
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+      {/* Main Container */}
+      <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-5">
+        
         {/* Datasets Selection Bar */}
-        <div className="bg-slate-800/80 border border-slate-700 p-5 rounded-3xl space-y-3 shadow-xl">
+        <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3 shadow-xs">
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <Layers className="w-4 h-4 text-indigo-400" /> Assigned Datasets ({assignedDatasets.length})
+            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+              <Layers className="w-4 h-4 text-indigo-600" /> Assigned Datasets ({assignedDatasets.length})
             </h2>
-            <span className="text-xs text-slate-400">Click a dataset to view &amp; edit attendance</span>
+            <span className="text-xs text-slate-400 hidden sm:inline">Tap to select attendance set</span>
           </div>
 
           {assignedDatasets.length === 0 ? (
-            <div className="p-6 bg-slate-900/60 rounded-2xl border border-slate-700 text-center text-slate-400 text-xs">
-              No datasets assigned to your staff account yet. Please ask the Admin to assign datasets in Admin Panel &gt; Staff Management.
+            <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center text-slate-500 text-xs">
+              No datasets assigned to your staff account yet. Contact Admin to assign access.
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
               {assignedDatasets.map((ds) => {
                 const isSelected = ds.id === selectedDatasetId;
                 return (
                   <button
                     key={ds.id}
                     onClick={() => setSelectedDatasetId(ds.id)}
-                    className={`p-4 rounded-2xl text-left transition-all border relative overflow-hidden group ${
+                    className={`px-4 py-3 rounded-xl text-left transition-all border shrink-0 min-w-[160px] sm:min-w-[200px] ${
                       isSelected
-                        ? "bg-indigo-600 text-white border-indigo-400 shadow-lg shadow-indigo-600/30"
-                        : "bg-slate-900/70 text-slate-300 hover:bg-slate-900 border-slate-700/80 hover:border-slate-600"
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200"
+                        : "bg-slate-50 text-slate-800 hover:bg-slate-100 border-slate-200"
                     }`}
                   >
-                    <div className="font-bold text-sm truncate">{ds.name}</div>
-                    <div className={`text-xs mt-1 font-mono ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
-                      {ds.classes?.length ? `${ds.classes.length} Classes` : "Custom"} • {ds.groups?.length ? `Grp ${ds.groups.join(",")}` : "All"}
+                    <div className="font-bold text-xs sm:text-sm truncate">{ds.name}</div>
+                    <div className={`text-[11px] mt-0.5 font-mono ${isSelected ? "text-indigo-100" : "text-slate-500"}`}>
+                      {ds.classes?.length ? `${ds.classes.length} Classes` : "Custom"}
                     </div>
                   </button>
                 );
@@ -411,41 +409,41 @@ export default function StaffPanelPage() {
           )}
         </div>
 
-        {/* Dataset Header Controls & Date Picker */}
+        {/* Dataset Header & Date Selection Controls */}
         {activeDataset && (
-          <div className="space-y-6">
-            {/* Control Bar: Date Selector & Quick Stats */}
-            <div className="bg-slate-800/80 border border-slate-700 p-5 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1">
+          <div className="space-y-5">
+            {/* Control Bar: Date Selector */}
+            <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xl font-black text-white">{activeDataset.name}</span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 font-mono text-xs font-bold">
-                    Active Dataset
+                  <h2 className="text-lg sm:text-xl font-extrabold text-slate-900">{activeDataset.name}</h2>
+                  <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-mono font-bold uppercase">
+                    Active Set
                   </span>
                 </div>
-                <p className="text-xs text-slate-400">
-                  Select date to check historical attendance logs or record edits.
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Showing roster and attendance status for selected date.
                 </p>
               </div>
 
-              {/* Date Selection Box */}
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 px-3.5 py-2 rounded-2xl">
-                  <Calendar className="w-4 h-4 text-indigo-400" />
+              {/* Date Input */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800">
+                  <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
                   <input
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="bg-transparent text-sm font-mono font-bold text-white focus:outline-none cursor-pointer"
+                    className="bg-transparent text-xs sm:text-sm font-mono font-bold text-slate-900 focus:outline-none cursor-pointer"
                   />
                 </div>
 
                 <button
                   onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
-                  className={`px-3 py-2 rounded-2xl text-xs font-bold transition-all border ${
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
                     selectedDate === new Date().toISOString().split("T")[0]
-                      ? "bg-indigo-600 text-white border-indigo-500 shadow-md"
-                      : "bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800"
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                      : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
                   }`}
                 >
                   Today
@@ -453,42 +451,27 @@ export default function StaffPanelPage() {
               </div>
             </div>
 
-            {/* Attendance Analytics Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl flex items-center justify-between shadow-md">
-                <div>
-                  <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Total Students</div>
-                  <div className="text-2xl font-black text-white mt-1">{datasetStudents.length}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-slate-700/60 text-slate-300 flex items-center justify-center font-bold">
-                  <User className="w-5 h-5" />
-                </div>
+            {/* Quick Analytics Summary Grid */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-xs">
+                <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Total</div>
+                <div className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-0.5">{datasetStudents.length}</div>
               </div>
 
-              <div className="bg-emerald-950/30 border border-emerald-500/30 p-4 rounded-2xl flex items-center justify-between shadow-md">
-                <div>
-                  <div className="text-xs text-emerald-400 font-bold uppercase tracking-wider">Present ({selectedDate})</div>
-                  <div className="text-2xl font-black text-emerald-300 mt-1">{presentCount}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold border border-emerald-500/40">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
+              <div className="bg-emerald-50/60 border border-emerald-200 p-3.5 rounded-2xl shadow-xs">
+                <div className="text-[11px] text-emerald-700 font-bold uppercase tracking-wider">Present</div>
+                <div className="text-xl sm:text-2xl font-extrabold text-emerald-700 mt-0.5">{presentCount}</div>
               </div>
 
-              <div className="bg-rose-950/30 border border-rose-500/30 p-4 rounded-2xl flex items-center justify-between shadow-md">
-                <div>
-                  <div className="text-xs text-rose-400 font-bold uppercase tracking-wider">Absent ({selectedDate})</div>
-                  <div className="text-2xl font-black text-rose-300 mt-1">{absentCount}</div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-300 flex items-center justify-center font-bold border border-rose-500/40">
-                  <XCircle className="w-5 h-5" />
-                </div>
+              <div className="bg-rose-50/60 border border-rose-200 p-3.5 rounded-2xl shadow-xs">
+                <div className="text-[11px] text-rose-700 font-bold uppercase tracking-wider">Absent</div>
+                <div className="text-xl sm:text-2xl font-extrabold text-rose-700 mt-0.5">{absentCount}</div>
               </div>
             </div>
 
-            {/* Student Search & Action Bar */}
-            <div className="bg-slate-800/80 border border-slate-700 p-4 rounded-3xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-              {/* Search */}
+            {/* Filter & Action Controls */}
+            <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+              {/* Search Bar */}
               <div className="relative flex-1 w-full">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -496,21 +479,21 @@ export default function StaffPanelPage() {
                   placeholder="Search students by Name, ID, Class..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-2xl text-sm font-medium text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
               </div>
 
-              {/* Status Filter Tabs */}
-              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-between sm:justify-end">
-                <div className="bg-slate-900 p-1 rounded-2xl flex items-center gap-1 border border-slate-700">
+              {/* Status Filter Tabs & Bulk Actions */}
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
                   {["ALL", "PRESENT", "ABSENT"].map((st) => (
                     <button
                       key={st}
                       onClick={() => setStatusFilter(st)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                         statusFilter === st
-                          ? "bg-indigo-600 text-white shadow-md"
-                          : "text-slate-400 hover:text-slate-200"
+                          ? "bg-white text-indigo-700 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
                       }`}
                     >
                       {st}
@@ -518,19 +501,18 @@ export default function StaffPanelPage() {
                   ))}
                 </div>
 
-                {/* Bulk mark actions */}
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 shrink-0">
                   <button
                     onClick={() => handleBulkMark("PRESENT")}
-                    className="px-3 py-2 bg-emerald-600/80 hover:bg-emerald-600 text-white text-xs font-bold rounded-2xl border border-emerald-500/50 shadow-sm"
-                    title="Mark ALL students present for this date"
+                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs"
+                    title="Mark all present"
                   >
                     All Present
                   </button>
                   <button
                     onClick={() => handleBulkMark("ABSENT")}
-                    className="px-3 py-2 bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-bold rounded-2xl border border-rose-500/50 shadow-sm"
-                    title="Mark ALL students absent for this date"
+                    className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs"
+                    title="Mark all absent"
                   >
                     All Absent
                   </button>
@@ -538,120 +520,201 @@ export default function StaffPanelPage() {
               </div>
             </div>
 
-            {/* Students Table / Cards List */}
+            {/* Roster Display */}
             {displayedStudents.length === 0 ? (
-              <div className="bg-slate-800/80 border border-slate-700 p-12 rounded-3xl text-center space-y-2">
-                <User className="w-12 h-12 text-slate-600 mx-auto" />
-                <h3 className="text-base font-bold text-slate-300">No Students Found</h3>
-                <p className="text-xs text-slate-500">No student records match the active search or filter.</p>
+              <div className="bg-white border border-slate-200 p-10 rounded-2xl text-center space-y-2 shadow-xs">
+                <Users className="w-10 h-10 text-slate-300 mx-auto" />
+                <h3 className="text-sm font-bold text-slate-700">No Students Found</h3>
+                <p className="text-xs text-slate-400">No students match current search or status filter.</p>
               </div>
             ) : (
-              <div className="bg-slate-800/80 border border-slate-700 rounded-3xl overflow-hidden shadow-xl">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm text-slate-300">
-                    <thead className="bg-slate-900/80 text-xs uppercase tracking-wider font-extrabold text-slate-400 border-b border-slate-700">
-                      <tr>
-                        <th className="py-4 px-6">Student</th>
-                        <th className="py-4 px-6">ID &amp; Class</th>
-                        <th className="py-4 px-6 text-center">Status on {selectedDate}</th>
-                        <th className="py-4 px-6 text-center">Scan Time</th>
-                        <th className="py-4 px-6 text-right">Edit Attendance</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-700/60 font-medium">
-                      {displayedStudents.map((student) => {
-                        const sId = student.studentId || student.id;
-                        const existingLog = attendanceMap[sId];
-                        const isPresent = !!existingLog;
+              <>
+                {/* MOBILE PHONE COMPATIBLE VIEW (Cards view for small screens) */}
+                <div className="block sm:hidden space-y-3">
+                  {displayedStudents.map((student) => {
+                    const sId = student.studentId || student.id;
+                    const existingLog = attendanceMap[sId];
+                    const isPresent = !!existingLog;
 
-                        return (
-                          <tr key={sId} className="hover:bg-slate-700/40 transition-colors">
-                            {/* Student Name & Photo */}
-                            <td className="py-4 px-6">
-                              <div className="flex items-center gap-3">
-                                {student.photoUrl ? (
-                                  <img
-                                    src={student.photoUrl}
-                                    alt={student.name}
-                                    className="w-10 h-10 rounded-xl object-cover border border-slate-700 shadow-sm"
-                                  />
-                                ) : (
-                                  <div className="w-10 h-10 rounded-xl bg-slate-700 text-indigo-300 flex items-center justify-center font-black text-sm border border-slate-600">
-                                    {student.name?.charAt(0).toUpperCase()}
-                                  </div>
-                                )}
-                                <div>
-                                  <div className="font-bold text-white">{student.name}</div>
-                                  <div className="text-xs text-slate-400 font-mono">Group {student.group || "A"}</div>
-                                </div>
+                    return (
+                      <div
+                        key={sId}
+                        className={`bg-white border rounded-2xl p-4 shadow-xs space-y-3 transition-all ${
+                          isPresent ? "border-emerald-200 bg-emerald-50/20" : "border-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            {student.photoUrl ? (
+                              <img
+                                src={student.photoUrl}
+                                alt={student.name}
+                                className="w-11 h-11 rounded-xl object-cover border border-slate-200 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black text-sm border border-indigo-200 shrink-0">
+                                {student.name?.charAt(0).toUpperCase()}
                               </div>
-                            </td>
+                            )}
 
-                            {/* ID & Class */}
-                            <td className="py-4 px-6">
-                              <div className="inline-block px-2.5 py-0.5 rounded-md bg-slate-900 text-indigo-400 font-mono text-xs font-bold border border-slate-700">
-                                {sId}
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 text-sm truncate">{student.name}</div>
+                              <div className="text-xs text-slate-500 font-mono">
+                                ID: {sId} • Cls {student.class}-{student.section}
                               </div>
-                              <div className="text-xs text-slate-400 mt-1 font-semibold">
-                                Class {student.class} - {student.section}
-                              </div>
-                            </td>
+                            </div>
+                          </div>
 
-                            {/* Status Badge */}
-                            <td className="py-4 px-6 text-center">
-                              {isPresent ? (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold">
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  <span>PRESENT</span>
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-bold">
-                                  <XCircle className="w-3.5 h-3.5" />
-                                  <span>ABSENT</span>
-                                </span>
-                              )}
-                            </td>
+                          <div className="shrink-0">
+                            {isPresent ? (
+                              <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] border border-emerald-200 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> PRESENT
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 font-bold text-[10px] border border-rose-200 flex items-center gap-1">
+                                <XCircle className="w-3 h-3 text-rose-600" /> ABSENT
+                              </span>
+                            )}
+                          </div>
+                        </div>
 
-                            {/* Scan Time */}
-                            <td className="py-4 px-6 text-center font-mono text-xs text-slate-400">
-                              {existingLog ? existingLog.formattedTime || "Recorded" : "--:--"}
-                            </td>
+                        {/* Quick Tap Buttons on Mobile */}
+                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+                          <button
+                            onClick={() => handleToggleAttendance(student, "PRESENT")}
+                            className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                              isPresent
+                                ? "bg-emerald-600 text-white shadow-xs"
+                                : "bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200"
+                            }`}
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Present</span>
+                          </button>
 
-                            {/* Edit Action Buttons */}
-                            <td className="py-4 px-6 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <button
-                                  onClick={() => handleToggleAttendance(student, "PRESENT")}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
-                                    isPresent
-                                      ? "bg-emerald-600/30 text-emerald-300 border border-emerald-500/40"
-                                      : "bg-slate-900 hover:bg-emerald-600 text-slate-300 hover:text-white border border-slate-700"
-                                  }`}
-                                >
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  <span>Mark Present</span>
-                                </button>
-
-                                <button
-                                  onClick={() => handleToggleAttendance(student, "ABSENT")}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
-                                    !isPresent
-                                      ? "bg-rose-600/30 text-rose-300 border border-rose-500/40"
-                                      : "bg-slate-900 hover:bg-rose-600 text-slate-300 hover:text-white border border-slate-700"
-                                  }`}
-                                >
-                                  <XCircle className="w-3.5 h-3.5" />
-                                  <span>Mark Absent</span>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                          <button
+                            onClick={() => handleToggleAttendance(student, "ABSENT")}
+                            className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                              !isPresent
+                                ? "bg-rose-600 text-white shadow-xs"
+                                : "bg-slate-100 text-slate-700 hover:bg-rose-50 hover:text-rose-700 border border-slate-200"
+                            }`}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>Absent</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+
+                {/* DESKTOP / TABLET TABLE VIEW */}
+                <div className="hidden sm:block bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-700">
+                      <thead className="bg-slate-50 text-xs uppercase tracking-wider font-bold text-slate-500 border-b border-slate-200">
+                        <tr>
+                          <th className="py-3.5 px-6">Student</th>
+                          <th className="py-3.5 px-6">ID &amp; Class</th>
+                          <th className="py-3.5 px-6 text-center">Status on {selectedDate}</th>
+                          <th className="py-3.5 px-6 text-center">Scan Time</th>
+                          <th className="py-3.5 px-6 text-right">Edit Attendance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {displayedStudents.map((student) => {
+                          const sId = student.studentId || student.id;
+                          const existingLog = attendanceMap[sId];
+                          const isPresent = !!existingLog;
+
+                          return (
+                            <tr key={sId} className="hover:bg-slate-50/80 transition-colors">
+                              {/* Student Name & Photo */}
+                              <td className="py-3.5 px-6">
+                                <div className="flex items-center gap-3">
+                                  {student.photoUrl ? (
+                                    <img
+                                      src={student.photoUrl}
+                                      alt={student.name}
+                                      className="w-10 h-10 rounded-xl object-cover border border-slate-200 shadow-2xs"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-sm border border-indigo-200">
+                                      {student.name?.charAt(0).toUpperCase()}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <div className="font-bold text-slate-900">{student.name}</div>
+                                    <div className="text-xs text-slate-400 font-mono">Group {student.group || "A"}</div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* ID & Class */}
+                              <td className="py-3.5 px-6">
+                                <span className="inline-block px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-mono text-xs font-bold border border-indigo-200">
+                                  {sId}
+                                </span>
+                                <div className="text-xs text-slate-500 mt-0.5">
+                                  Class {student.class} - {student.section}
+                                </div>
+                              </td>
+
+                              {/* Status Badge */}
+                              <td className="py-3.5 px-6 text-center">
+                                {isPresent ? (
+                                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> PRESENT
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold">
+                                    <XCircle className="w-3.5 h-3.5 text-rose-600" /> ABSENT
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Scan Time */}
+                              <td className="py-3.5 px-6 text-center font-mono text-xs text-slate-500">
+                                {existingLog ? existingLog.formattedTime || "Recorded" : "--:--"}
+                              </td>
+
+                              {/* Edit Action Buttons */}
+                              <td className="py-3.5 px-6 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleToggleAttendance(student, "PRESENT")}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
+                                      isPresent
+                                        ? "bg-emerald-600 text-white shadow-2xs"
+                                        : "bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200"
+                                    }`}
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Present</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleToggleAttendance(student, "ABSENT")}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
+                                      !isPresent
+                                        ? "bg-rose-600 text-white shadow-2xs"
+                                        : "bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200"
+                                    }`}
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                    <span>Absent</span>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}
