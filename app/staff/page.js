@@ -12,7 +12,7 @@ import {
 import { 
   UserCheck, 
   LogOut, 
-  Calendar, 
+  Calendar as CalendarIcon, 
   Clock, 
   Search, 
   CheckCircle2, 
@@ -20,16 +20,18 @@ import {
   Filter, 
   Layers, 
   User, 
-  Lock, 
   Key, 
-  Sparkles, 
   ShieldCheck, 
   AlertCircle,
-  ChevronRight,
   Check,
   X,
-  SlidersHorizontal,
-  Users
+  Users,
+  LayoutDashboard,
+  ClipboardList,
+  ChevronLeft,
+  ChevronRight,
+  TrendingUp,
+  Sparkles
 } from "lucide-react";
 
 export default function StaffPanelPage() {
@@ -40,6 +42,9 @@ export default function StaffPanelPage() {
   const [loginError, setLoginError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
+  // Active Navigation Tab: "dashboard" | "roster" | "logs"
+  const [activeNavTab, setActiveNavTab] = useState("roster");
+
   // Realtime Data
   const [students, setStudents] = useState([]);
   const [datasets, setDatasets] = useState([]);
@@ -48,6 +53,10 @@ export default function StaffPanelPage() {
   // Selected Dataset & Date
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
+
+  // Calendar Modal State
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [calendarMonthYear, setCalendarMonthYear] = useState(() => new Date());
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState("");
@@ -86,7 +95,7 @@ export default function StaffPanelPage() {
     };
   }, [currentStaff]);
 
-  // Filter assigned datasets for this logged-in staff
+  // Assigned datasets for logged-in staff
   const assignedDatasets = useMemo(() => {
     if (!currentStaff) return [];
     const assignedIds = currentStaff.assignedDatasets || [];
@@ -94,7 +103,7 @@ export default function StaffPanelPage() {
     return datasets.filter((d) => assignedIds.includes(d.id));
   }, [datasets, currentStaff]);
 
-  // Auto-select first dataset when assignedDatasets loads
+  // Auto-select first dataset
   useEffect(() => {
     if (assignedDatasets.length > 0 && (!selectedDatasetId || !assignedDatasets.some(d => d.id === selectedDatasetId))) {
       setSelectedDatasetId(assignedDatasets[0].id);
@@ -120,7 +129,7 @@ export default function StaffPanelPage() {
     });
   }, [students, activeDataset]);
 
-  // Attendance lookup for selectedDate
+  // Attendance logs for selectedDate
   const logsForSelectedDate = useMemo(() => {
     return attendanceLogs.filter((log) => log.date === selectedDate);
   }, [attendanceLogs, selectedDate]);
@@ -136,7 +145,58 @@ export default function StaffPanelPage() {
     return map;
   }, [logsForSelectedDate]);
 
-  // Handle Login
+  // ─── DYNAMIC DATE COLOR MAP (Red to Green Indicator Circles) ────────────────
+  const dateColorMap = useMemo(() => {
+    const map = {};
+    if (datasetStudents.length === 0) return map;
+
+    // Group logs by date
+    const logsByDate = {};
+    attendanceLogs.forEach((log) => {
+      if (!log.date) return;
+      if (!logsByDate[log.date]) logsByDate[log.date] = new Set();
+      // Only count if student belongs to datasetStudents
+      const isStudentInDataset = datasetStudents.some(
+        (s) => (s.studentId || s.id) === log.studentId
+      );
+      if (isStudentInDataset) {
+        logsByDate[log.date].add(log.studentId);
+      }
+    });
+
+    // Calculate percentage and assign red/yellow/green color
+    Object.keys(logsByDate).forEach((dateStr) => {
+      const presentCount = logsByDate[dateStr].size;
+      const pct = (presentCount / datasetStudents.length) * 100;
+
+      let colorClass = "bg-rose-500"; // Red (< 50%)
+      let textClass = "text-rose-600";
+      let bgSoft = "bg-rose-50 border-rose-200";
+
+      if (pct >= 80) {
+        colorClass = "bg-emerald-500"; // Green (>= 80%)
+        textClass = "text-emerald-600";
+        bgSoft = "bg-emerald-50 border-emerald-200";
+      } else if (pct >= 50) {
+        colorClass = "bg-amber-500"; // Yellow/Amber (50%-79%)
+        textClass = "text-amber-600";
+        bgSoft = "bg-amber-50 border-amber-200";
+      }
+
+      map[dateStr] = {
+        presentCount,
+        total: datasetStudents.length,
+        pct: Math.round(pct),
+        colorClass,
+        textClass,
+        bgSoft
+      };
+    });
+
+    return map;
+  }, [attendanceLogs, datasetStudents]);
+
+  // Login Handler
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!inputStaffId.trim() || !inputPassword.trim()) {
@@ -162,14 +222,14 @@ export default function StaffPanelPage() {
     }
   };
 
-  // Handle Logout
+  // Logout Handler
   const handleLogout = () => {
     setCurrentStaff(null);
     sessionStorage.removeItem("staff_session");
     setSelectedDatasetId("");
   };
 
-  // Handle Mark Present / Absent toggle
+  // Toggle Attendance
   const handleToggleAttendance = async (student, targetStatus) => {
     const sName = student.name || "Student";
     try {
@@ -240,14 +300,44 @@ export default function StaffPanelPage() {
 
   const absentCount = datasetStudents.length - presentCount;
 
-  // ─── LIGHT THEME LOGIN VIEW ───────────────────────────────────────────────
+  // 7-day strip calculation (centered around current selectedDate)
+  const last7Days = useMemo(() => {
+    const dates = [];
+    const base = new Date(selectedDate || Date.now());
+    for (let i = -3; i <= 3; i++) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      dates.push(d.toISOString().split("T")[0]);
+    }
+    return dates;
+  }, [selectedDate]);
+
+  // Generate calendar days for Calendar Modal
+  const calendarDays = useMemo(() => {
+    const year = calendarMonthYear.getFullYear();
+    const month = calendarMonthYear.getMonth();
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const days = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      days.push(null);
+    }
+    for (let day = 1; day <= totalDaysInMonth; day++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      days.push(dateStr);
+    }
+    return days;
+  }, [calendarMonthYear]);
+
+  // ─── LOGIN VIEW ───────────────────────────────────────────────────────────
   if (!currentStaff) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans text-slate-900 relative">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans text-slate-900">
         <motion.div 
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white border border-slate-200 p-8 rounded-3xl max-w-md w-full shadow-xl space-y-6 relative z-10"
+          className="bg-white border border-slate-200 p-8 rounded-3xl max-w-md w-full shadow-xl space-y-6"
         >
           <div className="text-center space-y-2">
             <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-md shadow-indigo-200">
@@ -257,7 +347,7 @@ export default function StaffPanelPage() {
               BioAttend Staff Portal
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Log in with Staff ID &amp; password to manage attendance datasets.
+              Log in with Staff ID &amp; password to access attendance rosters.
             </p>
           </div>
 
@@ -316,9 +406,9 @@ export default function StaffPanelPage() {
     );
   }
 
-  // ─── LIGHT THEME DASHBOARD VIEW ───────────────────────────────────────────
+  // ─── DASHBOARD VIEW ───────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col pb-20 sm:pb-6">
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMsg && (
@@ -347,12 +437,45 @@ export default function StaffPanelPage() {
             <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
               <span className="font-bold text-indigo-600">ID: {currentStaff.staffId || currentStaff.id}</span>
               <span>•</span>
-              <span className="truncate max-w-[120px] sm:max-w-none">{currentStaff.name}</span>
+              <span className="truncate max-w-[100px] sm:max-w-none">{currentStaff.name}</span>
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Desktop Header Nav Links */}
+        <div className="hidden md:flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <button
+            onClick={() => setActiveNavTab("dashboard")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+              activeNavTab === "dashboard" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>Dashboard</span>
+          </button>
+
+          <button
+            onClick={() => setActiveNavTab("roster")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+              activeNavTab === "roster" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Dataset Roster</span>
+          </button>
+
+          <button
+            onClick={() => setActiveNavTab("logs")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+              activeNavTab === "logs" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <ClipboardList className="w-3.5 h-3.5" />
+            <span>Log Info</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-xl text-slate-700 font-mono text-xs font-semibold border border-slate-200">
             <Clock className="w-3.5 h-3.5 text-indigo-600" />
             <span>{currentTime || "00:00:00 AM"}</span>
@@ -363,91 +486,182 @@ export default function StaffPanelPage() {
             className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center gap-1.5 transition-all"
           >
             <LogOut className="w-3.5 h-3.5 text-slate-500" />
-            <span>Logout</span>
+            <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Content Area */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-5">
-        
-        {/* Datasets Selection Bar */}
-        <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3 shadow-xs">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-              <Layers className="w-4 h-4 text-indigo-600" /> Assigned Datasets ({assignedDatasets.length})
-            </h2>
-            <span className="text-xs text-slate-400 hidden sm:inline">Tap to select attendance set</span>
-          </div>
 
-          {assignedDatasets.length === 0 ? (
-            <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center text-slate-500 text-xs">
-              No datasets assigned to your staff account yet. Contact Admin to assign access.
-            </div>
-          ) : (
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-              {assignedDatasets.map((ds) => {
-                const isSelected = ds.id === selectedDatasetId;
-                return (
-                  <button
-                    key={ds.id}
-                    onClick={() => setSelectedDatasetId(ds.id)}
-                    className={`px-4 py-3 rounded-xl text-left transition-all border shrink-0 min-w-[160px] sm:min-w-[200px] ${
-                      isSelected
-                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200"
-                        : "bg-slate-50 text-slate-800 hover:bg-slate-100 border-slate-200"
-                    }`}
-                  >
-                    <div className="font-bold text-xs sm:text-sm truncate">{ds.name}</div>
-                    <div className={`text-[11px] mt-0.5 font-mono ${isSelected ? "text-indigo-100" : "text-slate-500"}`}>
-                      {ds.classes?.length ? `${ds.classes.length} Classes` : "Custom"}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Dataset Header & Date Selection Controls */}
-        {activeDataset && (
+        {/* ─── TAB 1: DASHBOARD OVERVIEW ──────────────────────────────────── */}
+        {activeNavTab === "dashboard" && (
           <div className="space-y-5">
-            {/* Control Bar: Date Selector */}
-            <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-extrabold text-slate-900">{activeDataset.name}</h2>
-                  <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-mono font-bold uppercase">
-                    Active Set
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Showing roster and attendance status for selected date.
+            {/* Hero Welcome Card */}
+            <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 text-white p-6 sm:p-8 rounded-3xl shadow-lg relative overflow-hidden">
+              <div className="relative z-10 space-y-2">
+                <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-wider">
+                  Staff Overview
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight">Welcome, {currentStaff.name}!</h2>
+                <p className="text-xs sm:text-sm text-indigo-100 max-w-xl">
+                  Manage assigned attendance datasets, review color-coded daily attendance health, and edit student records.
                 </p>
               </div>
+            </div>
 
-              {/* Date Input */}
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800">
-                  <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="bg-transparent text-xs sm:text-sm font-mono font-bold text-slate-900 focus:outline-none cursor-pointer"
-                  />
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Assigned Datasets</span>
+                  <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600"><Layers className="w-4 h-4" /></div>
+                </div>
+                <div className="text-3xl font-extrabold text-slate-900 mt-2">{assignedDatasets.length}</div>
+              </div>
+
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Active Students</span>
+                  <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600"><Users className="w-4 h-4" /></div>
+                </div>
+                <div className="text-3xl font-extrabold text-slate-900 mt-2">{datasetStudents.length}</div>
+              </div>
+
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Present Today</span>
+                  <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600"><CheckCircle2 className="w-4 h-4" /></div>
+                </div>
+                <div className="text-3xl font-extrabold text-emerald-600 mt-2">{presentCount}</div>
+              </div>
+            </div>
+
+            {/* Datasets List Cards */}
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl space-y-4 shadow-xs">
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Assigned Datasets Roster</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {assignedDatasets.map((ds) => (
+                  <div
+                    key={ds.id}
+                    onClick={() => {
+                      setSelectedDatasetId(ds.id);
+                      setActiveNavTab("roster");
+                    }}
+                    className="p-4 rounded-2xl border border-slate-200 hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer bg-slate-50 hover:bg-white space-y-2 group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-slate-900 group-hover:text-indigo-600">{ds.name}</span>
+                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                    <div className="text-xs text-slate-500 font-mono">
+                      {ds.classes?.length ? `${ds.classes.length} Classes` : "Custom Set"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── TAB 2: DATASET ROSTER & DYNAMIC COLOR DATE PICKER ──────────── */}
+        {activeNavTab === "roster" && (
+          <div className="space-y-5">
+            {/* Datasets Selector Tabs */}
+            <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-indigo-600" /> Select Dataset
+                </h2>
+                <span className="text-xs text-slate-400 font-mono">
+                  Active: {activeDataset ? activeDataset.name : "None"}
+                </span>
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {assignedDatasets.map((ds) => {
+                  const isSelected = ds.id === selectedDatasetId;
+                  return (
+                    <button
+                      key={ds.id}
+                      onClick={() => setSelectedDatasetId(ds.id)}
+                      className={`px-4 py-2.5 rounded-xl text-left transition-all border shrink-0 min-w-[140px] sm:min-w-[180px] ${
+                        isSelected
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200"
+                          : "bg-slate-50 text-slate-800 hover:bg-slate-100 border-slate-200"
+                      }`}
+                    >
+                      <div className="font-bold text-xs sm:text-sm truncate">{ds.name}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* DYNAMIC DATE PICKER STRIP WITH COLOR-CODED CIRCLES (RED TO GREEN) */}
+            <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <CalendarIcon className="w-4 h-4 text-indigo-600" /> Dynamic Attendance Dates
+                  </h3>
+                  {/* Color Legend */}
+                  <div className="hidden sm:flex items-center gap-3 text-[10px] font-bold text-slate-500 pl-4 border-l border-slate-200">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> ≥80% High</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> 50%-79% Moderate</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> &lt;50% Low</span>
+                  </div>
                 </div>
 
                 <button
-                  onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
-                    selectedDate === new Date().toISOString().split("T")[0]
-                      ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
-                      : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
-                  }`}
+                  onClick={() => setIsCalendarOpen(true)}
+                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl border border-indigo-200 flex items-center gap-1.5 transition-all"
                 >
-                  Today
+                  <CalendarIcon className="w-3.5 h-3.5" />
+                  <span>Full Month Calendar</span>
                 </button>
+              </div>
+
+              {/* 7-Day Date Strip with Dynamic Color Circles */}
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                {last7Days.map((dateStr) => {
+                  const isSelected = dateStr === selectedDate;
+                  const colorInfo = dateColorMap[dateStr];
+                  const circleColor = colorInfo ? colorInfo.colorClass : "bg-slate-300";
+                  const dateObj = new Date(dateStr);
+                  const dayName = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+                  const dayNum = dateObj.getDate();
+
+                  return (
+                    <button
+                      key={dateStr}
+                      onClick={() => setSelectedDate(dateStr)}
+                      className={`p-2 sm:p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-between gap-1 relative overflow-hidden ${
+                        isSelected
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200"
+                          : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800"
+                      }`}
+                    >
+                      <span className={`text-[10px] font-bold uppercase ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
+                        {dayName}
+                      </span>
+                      <span className="text-sm sm:text-base font-black">{dayNum}</span>
+
+                      {/* DYNAMIC COLOR INDICATOR CIRCLE (RED / AMBER / GREEN) */}
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full ${circleColor} ${isSelected ? "ring-2 ring-white" : ""}`}
+                          title={colorInfo ? `${colorInfo.pct}% Present` : "No logs"}
+                        />
+                        {colorInfo && (
+                          <span className={`text-[9px] font-mono font-bold ${isSelected ? "text-white" : colorInfo.textClass}`}>
+                            {colorInfo.pct}%
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -582,25 +796,25 @@ export default function StaffPanelPage() {
                         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
                           <button
                             onClick={() => handleToggleAttendance(student, "PRESENT")}
-                            className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                            className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
                               isPresent
                                 ? "bg-emerald-600 text-white shadow-xs"
                                 : "bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200"
                             }`}
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            <Check className="w-4 h-4" />
                             <span>Present</span>
                           </button>
 
                           <button
                             onClick={() => handleToggleAttendance(student, "ABSENT")}
-                            className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                            className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
                               !isPresent
                                 ? "bg-rose-600 text-white shadow-xs"
                                 : "bg-slate-100 text-slate-700 hover:bg-rose-50 hover:text-rose-700 border border-slate-200"
                             }`}
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-4 h-4" />
                             <span>Absent</span>
                           </button>
                         </div>
@@ -718,7 +932,213 @@ export default function StaffPanelPage() {
             )}
           </div>
         )}
+
+        {/* ─── TAB 3: LOG ACTIVITY INFO STREAM ───────────────────────────── */}
+        {activeNavTab === "logs" && (
+          <div className="space-y-4">
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-indigo-600" /> Attendance Scan Log Stream
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Showing historical attendance activity logs sorted by newest timestamp.
+                </p>
+              </div>
+
+              <span className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-mono font-bold rounded-xl border border-slate-200">
+                Total Logs: {attendanceLogs.length}
+              </span>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-700">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wider font-bold text-slate-500 border-b border-slate-200">
+                    <tr>
+                      <th className="py-3.5 px-6">Student</th>
+                      <th className="py-3.5 px-6">Dataset</th>
+                      <th className="py-3.5 px-6 text-center">Scan Type</th>
+                      <th className="py-3.5 px-6 text-center">Date</th>
+                      <th className="py-3.5 px-6 text-right">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {attendanceLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-slate-400 text-xs">
+                          No attendance logs recorded in the database yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      attendanceLogs.slice(0, 50).map((log) => (
+                        <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-6">
+                            <div className="font-bold text-slate-900">{log.name}</div>
+                            <div className="text-xs text-slate-500 font-mono">ID: {log.studentId} • Class {log.class}-{log.section}</div>
+                          </td>
+                          <td className="py-3.5 px-6 font-semibold text-slate-700">
+                            {log.datasetName || "General"}
+                          </td>
+                          <td className="py-3.5 px-6 text-center">
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                              {log.type || "ENTRY"}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-6 text-center font-mono text-xs text-slate-600">
+                            {log.date}
+                          </td>
+                          <td className="py-3.5 px-6 text-right font-mono text-xs font-bold text-indigo-600">
+                            {log.formattedTime}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
+
+      {/* ─── MOBILE BOTTOM NAVIGATION MENU BAR (PHONE COMPATIBLE) ─────────────── */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-2 flex items-center justify-around shadow-lg">
+        <button
+          onClick={() => setActiveNavTab("dashboard")}
+          className={`flex flex-col items-center gap-1 px-4 py-1.5 rounded-xl transition-all ${
+            activeNavTab === "dashboard" ? "text-indigo-600 font-bold" : "text-slate-500"
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5" />
+          <span className="text-[10px]">Dashboard</span>
+        </button>
+
+        <button
+          onClick={() => setActiveNavTab("roster")}
+          className={`flex flex-col items-center gap-1 px-4 py-1.5 rounded-xl transition-all ${
+            activeNavTab === "roster" ? "text-indigo-600 font-bold" : "text-slate-500"
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span className="text-[10px]">Roster</span>
+        </button>
+
+        <button
+          onClick={() => setActiveNavTab("logs")}
+          className={`flex flex-col items-center gap-1 px-4 py-1.5 rounded-xl transition-all ${
+            activeNavTab === "logs" ? "text-indigo-600 font-bold" : "text-slate-500"
+          }`}
+        >
+          <ClipboardList className="w-5 h-5" />
+          <span className="text-[10px]">Log Info</span>
+        </button>
+      </div>
+
+      {/* ─── DYNAMIC MONTH CALENDAR MODAL WITH COLOR-CODED CIRCLES (RED TO GREEN) ─── */}
+      {isCalendarOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 border border-slate-200">
+            {/* Calendar Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-150 pb-4">
+              <div className="flex items-center gap-2.5">
+                <CalendarIcon className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-base font-bold text-slate-900">
+                  {calendarMonthYear.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    const prev = new Date(calendarMonthYear);
+                    prev.setMonth(prev.getMonth() - 1);
+                    setCalendarMonthYear(prev);
+                  }}
+                  className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-lg"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    const next = new Date(calendarMonthYear);
+                    next.setMonth(next.getMonth() + 1);
+                    setCalendarMonthYear(next);
+                  }}
+                  className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-lg"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={() => setIsCalendarOpen(false)}
+                  className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg ml-2"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Color Legend */}
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> High (≥80%)</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Moderate (50-79%)</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Low (&lt;50%)</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-300" /> No logs</span>
+            </div>
+
+            {/* Weekday Headers */}
+            <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 uppercase">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <div key={day} className="py-1">{day}</div>
+              ))}
+            </div>
+
+            {/* Month Calendar Grid */}
+            <div className="grid grid-cols-7 gap-1.5">
+              {calendarDays.map((dateStr, index) => {
+                if (!dateStr) {
+                  return <div key={`empty-${index}`} className="h-12" />;
+                }
+
+                const dayNum = new Date(dateStr).getDate();
+                const isSelected = dateStr === selectedDate;
+                const colorInfo = dateColorMap[dateStr];
+                const circleColor = colorInfo ? colorInfo.colorClass : "bg-slate-300";
+
+                return (
+                  <button
+                    key={dateStr}
+                    onClick={() => {
+                      setSelectedDate(dateStr);
+                      setIsCalendarOpen(false);
+                    }}
+                    className={`h-12 rounded-xl border flex flex-col items-center justify-center relative transition-all ${
+                      isSelected
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200 font-bold"
+                        : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800"
+                    }`}
+                  >
+                    <span className="text-xs">{dayNum}</span>
+
+                    {/* DYNAMIC COLOR INDICATOR CIRCLE */}
+                    <div className="flex items-center gap-0.5 mt-0.5">
+                      <span className={`w-2 h-2 rounded-full ${circleColor}`} />
+                      {colorInfo && (
+                        <span className={`text-[8px] font-mono ${isSelected ? "text-white" : colorInfo.textClass}`}>
+                          {colorInfo.pct}%
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
