@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { 
   X, 
   Upload, 
@@ -8,61 +8,84 @@ import {
   Sparkles, 
   CheckCircle2, 
   AlertCircle, 
-  Loader2,
-  User,
-  Hash,
-  School,
-  Group
+  User, 
+  Hash, 
+  School, 
+  Group as GroupIcon,
+  RefreshCw,
+  ArrowRight,
+  ShieldCheck
 } from "lucide-react";
-import { uploadToImgBB } from "@/lib/imgbb";
-import { addStudent } from "@/lib/firebase";
-import { extractFaceDescriptor } from "@/lib/faceApi";
 
-export default function AddStudentModal({ isOpen, onClose }) {
-  const [studentId, setStudentId] = useState(`STU_${Math.floor(100000 + Math.random() * 900000)}`);
+const POSES = [
+  { step: 0, id: "center", label: "Pose 1: Look Center", subtitle: "Align face straight looking at camera" },
+  { step: 1, id: "left",   label: "Pose 2: Turn Left",   subtitle: "Turn head slightly to your left" },
+  { step: 2, id: "right",  label: "Pose 3: Turn Right",  subtitle: "Turn head slightly to your right" }
+];
+
+export default function AddStudentModal({ isOpen, onClose, onStartRegistration }) {
+  const [studentId, setStudentId] = useState("");
   const [name, setName] = useState("");
   const [studentClass, setStudentClass] = useState("10");
   const [section, setSection] = useState("A");
   const [group, setGroup] = useState("A");
 
-  // Photo & Biometrics State
-  const [photoPreview, setPhotoPreview] = useState(null);
-  const [photoFile, setPhotoFile] = useState(null);
-  const [descriptorStatus, setDescriptorStatus] = useState("idle"); // idle | processing | success | error
-  const [extractedDescriptor, setExtractedDescriptor] = useState(null);
-  
-  // Camera state
+  // Multi-Side Pose Photos State { center: null, left: null, right: null }
+  const [capturedPoses, setCapturedPoses] = useState({ center: null, left: null, right: null });
+  const [currentPoseIndex, setCurrentPoseIndex] = useState(0);
   const [useCameraMode, setUseCameraMode] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
-  const imgRef = useRef(null);
+  const streamRef = useRef(null);
+
+  // Generate random student ID when opening
+  useEffect(() => {
+    if (isOpen) {
+      setStudentId(`STU_${Math.floor(100000 + Math.random() * 900000)}`);
+      setName("");
+      setCapturedPoses({ center: null, left: null, right: null });
+      setCurrentPoseIndex(0);
+      setUseCameraMode(false);
+      setErrorMessage("");
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // Handle Image File Upload
+  // Handle Image File Upload (Single file populates center pose)
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      setPhotoFile(file);
       const reader = new FileReader();
       reader.onload = (event) => {
-        setPhotoPreview(event.target.result);
-        processBiometricsFromImage(event.target.result);
+        const src = event.target.result;
+        setCapturedPoses({
+          center: src,
+          left: src,
+          right: src
+        });
       };
       reader.readAsDataURL(file);
     }
   };
 
-  // Start Live Webcam Capture Mode
+  // Start Live Webcam Stream (3:4 ratio)
   const startCamera = async () => {
     setUseCameraMode(true);
+    setErrorMessage("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: { ideal: 480 }, height: { ideal: 640 }, facingMode: "user" } 
+      });
+      streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
       }
     } catch (err) {
       setErrorMessage("Could not access camera: " + err.message);
@@ -72,116 +95,97 @@ export default function AddStudentModal({ isOpen, onClose }) {
 
   // Stop Webcam Stream
   const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = videoRef.current.srcObject.getTracks();
-      tracks.forEach(track => track.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
     setUseCameraMode(false);
   };
 
-  // Capture Snapshot from Webcam
-  const captureSnapshot = () => {
+  // Capture Snapshot for Current Pose Step
+  const captureCurrentPose = () => {
     if (!videoRef.current) return;
     const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
+    canvas.width = videoRef.current.videoWidth || 480;
+    canvas.height = videoRef.current.videoHeight || 640;
     const ctx = canvas.getContext("2d");
+    
+    // Draw mirrored image
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
     ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg");
+    
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    const poseKey = POSES[currentPoseIndex].id;
 
-    setPhotoPreview(dataUrl);
-    setPhotoFile(dataUrl); // Data URL base64 for ImgBB
-    stopCamera();
-    processBiometricsFromImage(dataUrl);
-  };
+    setCapturedPoses(prev => {
+      const updated = { ...prev, [poseKey]: dataUrl };
+      return updated;
+    });
 
-  // Extract Facial Descriptor using face-api.js
-  const processBiometricsFromImage = async (imageSrc) => {
-    setDescriptorStatus("processing");
-    setErrorMessage("");
-    try {
-      const tempImg = new Image();
-      tempImg.crossOrigin = "anonymous";
-      tempImg.src = imageSrc;
-      
-      await new Promise((resolve, reject) => {
-        tempImg.onload = resolve;
-        tempImg.onerror = reject;
-      });
-
-      const result = await extractFaceDescriptor(tempImg);
-      if (result && result.descriptor) {
-        setExtractedDescriptor(result.descriptor);
-        setDescriptorStatus("success");
-      } else {
-        setExtractedDescriptor(null);
-        setDescriptorStatus("error");
-        setErrorMessage("No clear face detected in the photo. Please select a photo with a visible face.");
-      }
-    } catch (err) {
-      console.error("Biometrics extraction error:", err);
-      setDescriptorStatus("error");
-      setErrorMessage("Biometric extraction failed: " + err.message);
+    // Advance to next pose if available
+    if (currentPoseIndex < POSES.length - 1) {
+      setCurrentPoseIndex(prev => prev + 1);
+    } else {
+      stopCamera();
     }
   };
 
-  // Form Submit Handler
-  const handleSubmit = async (e) => {
+  const handleRetakePoses = () => {
+    setCapturedPoses({ center: null, left: null, right: null });
+    setCurrentPoseIndex(0);
+    startCamera();
+  };
+
+  // Form Submit Handler -> Closes modal and starts background processing snackbar
+  const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim()) {
       setErrorMessage("Please enter the student's name.");
       return;
     }
-    if (!photoPreview) {
-      setErrorMessage("Please select or capture a student photo.");
-      return;
-    }
-    if (!extractedDescriptor) {
-      setErrorMessage("Cannot add student without verified face biometric descriptor.");
+    if (!capturedPoses.center) {
+      setErrorMessage("Please capture or upload face photos.");
       return;
     }
 
-    setIsSubmitting(true);
-    setErrorMessage("");
+    const payload = {
+      studentId: studentId.trim(),
+      name: name.trim(),
+      studentClass: studentClass.trim(),
+      section: section.trim(),
+      group: group.trim(),
+      photos: [
+        capturedPoses.center,
+        capturedPoses.left || capturedPoses.center,
+        capturedPoses.right || capturedPoses.center
+      ]
+    };
 
-    try {
-      // 1. Upload Photo to ImgBB
-      console.log("Uploading photo to ImgBB API...");
-      const imgbbResult = await uploadToImgBB(photoFile || photoPreview);
+    stopCamera();
+    onClose();
 
-      // 2. Save Student to Firebase Realtime Database
-      console.log("Saving student to Firebase RTDB...");
-      await addStudent({
-        studentId: studentId.trim(),
-        name: name.trim(),
-        class: studentClass.trim(),
-        section: section.trim(),
-        group: group.trim(),
-        photoUrl: imgbbResult.displayUrl,
-        descriptor: extractedDescriptor
-      });
-
-      // Reset and close
-      setIsSubmitting(false);
-      onClose();
-    } catch (err) {
-      console.error("Failed to add student:", err);
-      setErrorMessage("Failed to add student: " + err.message);
-      setIsSubmitting(false);
+    // Trigger background processing with corner progress snackbar!
+    if (onStartRegistration) {
+      onStartRegistration(payload);
     }
   };
 
+  const currentPose = POSES[currentPoseIndex];
+  const isAllPosesCaptured = !!(capturedPoses.center && capturedPoses.left && capturedPoses.right);
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto font-sans">
       <div className="bg-white rounded-3xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+        
         {/* Header */}
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div>
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <User className="w-5 h-5 text-indigo-600" /> Add New Student
+              <User className="w-5 h-5 text-indigo-600" /> Add New Student Record
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Enter student credentials & upload reference biometric photo
+              Multi-angle biometric pose capture &amp; background processing
             </p>
           </div>
           <button
@@ -204,7 +208,7 @@ export default function AddStudentModal({ isOpen, onClose }) {
             </div>
           )}
 
-          {/* Form Fields Grid */}
+          {/* Student Fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
@@ -235,7 +239,7 @@ export default function AddStudentModal({ isOpen, onClose }) {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
-                <School className="w-3.5 h-3.5 text-slate-400" /> Class & Section
+                <School className="w-3.5 h-3.5 text-slate-400" /> Class &amp; Section
               </label>
               <div className="flex gap-2">
                 <input
@@ -259,7 +263,7 @@ export default function AddStudentModal({ isOpen, onClose }) {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
-                <Group className="w-3.5 h-3.5 text-slate-400" /> Group Selector
+                <GroupIcon className="w-3.5 h-3.5 text-slate-400" /> Group Selector
               </label>
               <select
                 value={group}
@@ -272,79 +276,118 @@ export default function AddStudentModal({ isOpen, onClose }) {
             </div>
           </div>
 
-          {/* Photo & Biometric Section */}
+          {/* Photo & Multi-Angle Pose Section */}
           <div className="space-y-3 pt-2">
             <label className="block text-xs font-semibold text-slate-700 flex items-center justify-between">
-              <span>Face Reference Photo (ImgBB + Biometrics)</span>
-              {descriptorStatus === "success" && (
-                <span className="text-emerald-600 font-semibold text-[11px] flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> 128D Landmarks Extracted
+              <span>Face Reference Photos (3:4 Ratio Multi-Angle Capture)</span>
+              {isAllPosesCaptured && (
+                <span className="text-emerald-600 font-bold text-[11px] flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> All 3 Angles Captured
                 </span>
               )}
             </label>
 
             {useCameraMode ? (
-              <div className="relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-300 aspect-video flex items-center justify-center">
-                <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                <div className="absolute bottom-4 flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={captureSnapshot}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-xl shadow-lg flex items-center gap-2"
-                  >
-                    <Camera className="w-4 h-4" /> Capture Photo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={stopCamera}
-                    className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white font-medium text-xs rounded-xl"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : photoPreview ? (
-              <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <img
-                  src={photoPreview}
-                  alt="Student face preview"
-                  className="w-20 h-20 rounded-xl object-cover border border-slate-300"
-                />
-                <div className="flex-1 space-y-2">
-                  <div className="text-xs font-medium text-slate-700">
-                    {descriptorStatus === "processing" && (
-                      <div className="flex items-center gap-2 text-indigo-600">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Analyzing facial & eye landmarks...</span>
-                      </div>
-                    )}
-                    {descriptorStatus === "success" && (
-                      <div className="flex items-center gap-2 text-emerald-700">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>Face Recognized (128 Features Ready)</span>
-                      </div>
-                    )}
-                    {descriptorStatus === "error" && (
-                      <div className="flex items-center gap-2 text-red-600">
-                        <AlertCircle className="w-4 h-4 text-red-600" />
-                        <span>No Face Detected. Please re-take or upload clear face.</span>
-                      </div>
-                    )}
+              <div className="space-y-3">
+                {/* Pose Instructions Bar */}
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
+                      {currentPose.label}
+                    </div>
+                    <div className="text-[11px] text-indigo-600">
+                      {currentPose.subtitle}
+                    </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1">
+                    {POSES.map((p, idx) => (
+                      <span
+                        key={p.id}
+                        className={`w-2.5 h-2.5 rounded-full ${
+                          idx === currentPoseIndex
+                            ? "bg-indigo-600 animate-pulse"
+                            : capturedPoses[p.id]
+                            ? "bg-emerald-500"
+                            : "bg-slate-300"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3:4 Aspect Ratio Camera Box */}
+                <div className="relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-300 aspect-[3/4] max-w-[280px] mx-auto flex items-center justify-center shadow-lg">
+                  <video 
+                    ref={videoRef} 
+                    autoPlay 
+                    playsInline 
+                    muted 
+                    className="w-full h-full object-cover -scale-x-100" 
+                  />
+
+                  {/* Face Alignment Reticle Overlay */}
+                  <div className="absolute inset-4 border-2 border-dashed border-white/40 rounded-[40px] pointer-events-none flex items-center justify-center">
+                    <span className="text-[10px] font-bold text-white/80 bg-black/60 px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-xs">
+                      {currentPose.id.toUpperCase()} FACE ALIGNMENT
+                    </span>
+                  </div>
+
+                  <div className="absolute bottom-4 flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-lg border border-slate-200"
+                      onClick={captureCurrentPose}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 transition-all active:scale-95"
                     >
-                      Change Photo
+                      <Camera className="w-4 h-4" />
+                      <span>{currentPoseIndex < 2 ? "Capture & Next" : "Capture Final Pose"}</span>
                     </button>
                     <button
                       type="button"
-                      onClick={startCamera}
-                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-lg border border-slate-200"
+                      onClick={stopCamera}
+                      className="px-3 py-2 bg-slate-800/80 text-white font-semibold text-xs rounded-xl backdrop-blur-xs"
                     >
-                      Use Camera
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : capturedPoses.center ? (
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                {/* Display 3 Pose Badges Side-by-Side in 3:4 Ratio */}
+                <div className="grid grid-cols-3 gap-3">
+                  {POSES.map((p) => {
+                    const imgData = capturedPoses[p.id];
+                    return (
+                      <div key={p.id} className="space-y-1 text-center">
+                        <div className="aspect-[3/4] rounded-xl bg-slate-900 overflow-hidden border border-slate-300 relative shadow-sm">
+                          {imgData ? (
+                            <img src={imgData} alt={p.label} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-500 text-[10px]">
+                              Pending
+                            </div>
+                          )}
+                          <span className="absolute bottom-1 left-1 right-1 bg-black/60 backdrop-blur-xs text-white text-[9px] font-bold uppercase rounded py-0.5 truncate">
+                            {p.id}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-semibold text-slate-600 block truncate">
+                          {p.id === "center" ? "Front" : p.id === "left" ? "Left" : "Right"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                  <span className="text-xs text-slate-500 font-medium">3 Pose Snapshots Captured</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRetakePoses}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Re-take Poses
                     </button>
                   </div>
                 </div>
@@ -353,22 +396,22 @@ export default function AddStudentModal({ isOpen, onClose }) {
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-6 border-2 border-dashed border-slate-200 hover:border-indigo-500/50 hover:bg-indigo-50/30 rounded-2xl flex flex-col items-center justify-center text-center transition-all group cursor-pointer"
+                  onClick={startCamera}
+                  className="p-6 border-2 border-indigo-500/40 bg-indigo-50/20 hover:bg-indigo-50/50 rounded-2xl flex flex-col items-center justify-center text-center transition-all group cursor-pointer"
                 >
-                  <Upload className="w-6 h-6 text-slate-400 group-hover:text-indigo-600 mb-2" />
-                  <span className="text-xs font-semibold text-slate-700">Upload Image File</span>
-                  <span className="text-[11px] text-slate-400 mt-0.5">JPG, PNG up to 5MB</span>
+                  <Camera className="w-7 h-7 text-indigo-600 mb-2 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs font-extrabold text-slate-900">Take 3-Pose Camera Photos</span>
+                  <span className="text-[11px] text-slate-500 mt-0.5">3:4 Aspect Ratio (Center, Left, Right)</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={startCamera}
-                  className="p-6 border-2 border-dashed border-slate-200 hover:border-indigo-500/50 hover:bg-indigo-50/30 rounded-2xl flex flex-col items-center justify-center text-center transition-all group cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-6 border-2 border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-100/50 rounded-2xl flex flex-col items-center justify-center text-center transition-all group cursor-pointer"
                 >
-                  <Camera className="w-6 h-6 text-slate-400 group-hover:text-indigo-600 mb-2" />
-                  <span className="text-xs font-semibold text-slate-700">Take Live Webcam Photo</span>
-                  <span className="text-[11px] text-slate-400 mt-0.5">Use connected camera</span>
+                  <Upload className="w-6 h-6 text-slate-400 group-hover:text-slate-700 mb-2" />
+                  <span className="text-xs font-semibold text-slate-700">Upload Image File</span>
+                  <span className="text-[11px] text-slate-400 mt-0.5">JPG, PNG up to 5MB</span>
                 </button>
               </div>
             )}
@@ -383,34 +426,30 @@ export default function AddStudentModal({ isOpen, onClose }) {
           </div>
 
           {/* Footer Actions */}
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                stopCamera();
-                onClose();
-              }}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || descriptorStatus !== "success"}
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-md shadow-indigo-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving to Firebase & ImgBB...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>Save Student Record</span>
-                </>
-              )}
-            </button>
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-[11px] text-slate-400 font-medium">
+              * Processing runs in background snackbar
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  stopCamera();
+                  onClose();
+                }}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!capturedPoses.center}
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-200 flex items-center gap-2 disabled:opacity-40"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Save &amp; Process in Background</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>

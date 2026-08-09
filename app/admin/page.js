@@ -9,6 +9,7 @@ import DatasetManager from "@/components/admin/DatasetManager";
 import AttendanceRecords from "@/components/admin/AttendanceRecords";
 import SuspensionList from "@/components/admin/SuspensionList";
 import CameraConfig from "@/components/admin/CameraConfig";
+import RegistrationSnackbar from "@/components/admin/RegistrationSnackbar";
 import { subscribeToStudents, subscribeToDatasets, triggerScreenReload } from "@/lib/firebase";
 import { Clock, RefreshCw, CheckCircle2, Loader2 } from "lucide-react";
 
@@ -21,6 +22,9 @@ export default function AdminPage() {
   const [currentTime, setCurrentTime] = useState("");
   const [isUpdatingScreen, setIsUpdatingScreen] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
+
+  // Background Registration Jobs Queue
+  const [registrationQueue, setRegistrationQueue] = useState([]);
 
   // Realtime Subscriptions
   useEffect(() => {
@@ -49,6 +53,20 @@ export default function AdminPage() {
     } finally {
       setIsUpdatingScreen(false);
     }
+  };
+
+  const handleStartRegistration = (studentPayload) => {
+    const newJob = {
+      id: Date.now(),
+      ...studentPayload,
+      progress: 10,
+      status: "processing"
+    };
+    setRegistrationQueue(prev => [...prev, newJob]);
+  };
+
+  const handleDismissJob = (jobId) => {
+    setRegistrationQueue(prev => prev.filter(j => j.id !== jobId));
   };
 
   return (
@@ -141,11 +159,18 @@ export default function AdminPage() {
       <AddStudentModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
+        onStartRegistration={handleStartRegistration}
       />
 
       <BulkUploadModal
         isOpen={isBulkModalOpen}
         onClose={() => setIsBulkModalOpen(false)}
+      />
+
+      {/* Bottom-Right Floating Progress Snackbar for Background Registration */}
+      <RegistrationSnackbar
+        jobs={registrationQueue}
+        onDismissJob={handleDismissJob}
       />
     </div>
   );
