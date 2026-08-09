@@ -9,6 +9,7 @@ import {
   CheckCircle2, 
   AlertCircle, 
   User, 
+  UserCheck,
   ArrowRight, 
   Play, 
   Filter, 
