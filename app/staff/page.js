@@ -6,6 +6,7 @@ import {
   subscribeToStudents, 
   subscribeToDatasets, 
   subscribeToAttendanceLogs, 
+  subscribeToStaffs,
   verifyStaffLogin, 
   updateAttendanceForDate 
 } from "@/lib/firebase";
