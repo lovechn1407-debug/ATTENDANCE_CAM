@@ -182,6 +182,15 @@ export default function CameraConfig() {
     }
   };
 
+  const handleSelectLivenessMode = async (modeId) => {
+    setLivenessMode(modeId);
+    try {
+      await updateScreenConfig({ livenessMode: modeId });
+    } catch (err) {
+      console.error("Error updating liveness mode:", err);
+    }
+  };
+
   const handleAddScreen = async (e) => {
     e.preventDefault();
     if (!newScreenId.trim() || !newScreenPassword.trim()) {
@@ -493,7 +502,7 @@ export default function CameraConfig() {
             <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <Smile className="w-4 h-4 text-amber-500" /> Physical Liveness Verification Challenge
             </label>
-            <span className="text-[11px] font-bold text-indigo-600">
+            <span className="text-[11px] font-bold text-indigo-600 font-mono">
               Active: {livenessMode.replace("_", " ")}
             </span>
           </div>
@@ -514,17 +523,17 @@ export default function CameraConfig() {
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setLivenessMode(m.id)}
-                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                  onClick={() => handleSelectLivenessMode(m.id)}
+                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
                     isSelected
-                      ? "bg-indigo-50 border-indigo-600 text-indigo-950 ring-2 ring-indigo-500/20"
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-500/20"
                       : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                   }`}
                 >
-                  <IconComp className={`w-5 h-5 mb-2 ${isSelected ? "text-indigo-600" : "text-slate-400"}`} />
+                  <IconComp className={`w-5 h-5 mb-2 ${isSelected ? "text-white" : "text-slate-400"}`} />
                   <div>
                     <div className="font-bold text-xs">{m.label}</div>
-                    <div className="text-[10px] text-slate-500">{m.desc}</div>
+                    <div className={`text-[10px] ${isSelected ? "text-indigo-100" : "text-slate-500"}`}>{m.desc}</div>
                   </div>
                 </button>
               );
