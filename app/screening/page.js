@@ -457,12 +457,14 @@ export default function ScreeningPage() {
 
               if (challenge === "SMILE") {
                 isFulfilled = liveness.isSmiling;
-              } else if (challenge === "TURN_LEFT" || challenge === "TURN_RIGHT") {
-                // Accept EITHER left or right turn — the direction arrow is a visual cue only.
-                // Camera mirror swaps left/right in image coords vs. user perspective,
-                // so we just require any significant head turn.
-                isFulfilled = liveness.isHeadTurned;
+              } else if (challenge === "TURN_LEFT") {
+                // isTurnedLeft is now mirror-corrected: true when user actually turns their head left
+                isFulfilled = liveness.isTurnedLeft;
+              } else if (challenge === "TURN_RIGHT") {
+                // isTurnedRight is now mirror-corrected: true when user actually turns their head right
+                isFulfilled = liveness.isTurnedRight;
               }
+
 
               if (isFulfilled) {
                 const student = pendingMatchedStudentRef.current;
