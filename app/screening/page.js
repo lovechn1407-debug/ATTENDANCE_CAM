@@ -446,159 +446,172 @@ export default function ScreeningPage() {
           if (detections.length > 0) {
             lastFaceSeenRef.current = now;
             const det = detections[0];
-            const liveDesc = Array.from(det.descriptor);
-            const threshold = parseFloat(localStorage.getItem("face_match_threshold") || "0.48");
-            const match = findBestMatch(liveDesc, studentsRef.current, threshold);
 
-            // Analyze liveness poses (Smile, Turn Left, Turn Right)
-            const liveness = analyzeLivenessPose(det);
-
-            // Handle active Liveness Challenge evaluation
+            // ── LIVENESS MODE: skip all face recognition, only track pose/expression ──
+            // This is critical: a turned head gives a bad descriptor that fails recognition,
+            // so we must NOT run findBestMatch while a liveness challenge is active.
             if (statusStateRef.current === "VERIFYING_LIVENESS" && pendingMatchedStudentRef.current) {
               const challenge = activeChallengeRef.current;
+              const liveness = analyzeLivenessPose(det);
               let isFulfilled = false;
 
-              if (challenge === "SMILE" && liveness.isSmiling) {
-                isFulfilled = true;
-              } else if (challenge === "TURN_LEFT" && liveness.isTurnedLeft) {
-                isFulfilled = true;
-              } else if (challenge === "TURN_RIGHT" && liveness.isTurnedRight) {
-                isFulfilled = true;
+              if (challenge === "SMILE") {
+                isFulfilled = liveness.isSmiling;
+              } else if (challenge === "TURN_LEFT" || challenge === "TURN_RIGHT") {
+                // Accept EITHER left or right turn — the direction arrow is a visual cue only.
+                // Camera mirror swaps left/right in image coords vs. user perspective,
+                // so we just require any significant head turn.
+                isFulfilled = liveness.isHeadTurned;
               }
 
               if (isFulfilled) {
                 const student = pendingMatchedStudentRef.current;
                 const studentId = student.studentId || student.id;
-                
-                setStatusState("ATTENDANCE_MARKED"); 
-                setActiveMatch(student); 
+
+                setStatusState("ATTENDANCE_MARKED");
+                setActiveMatch(student);
                 setActiveChallenge(null);
+                pendingMatchedStudentRef.current = null;
                 playStateAudio("ATTENDANCE_MARKED");
 
                 const matchedDs = activeDatasetsRef.current.find(d => d.active);
-                recordAttendance({ 
-                  studentId, 
-                  name: student.name, 
-                  class: student.class, 
-                  section: student.section, 
-                  group: student.group, 
-                  datasetName: matchedDs?.name || "Master List", 
-                  type: "ENTRY", 
-                  timestamp: new Date().toISOString() 
+                recordAttendance({
+                  studentId,
+                  name: student.name,
+                  class: student.class,
+                  section: student.section,
+                  group: student.group,
+                  datasetName: matchedDs?.name || "Master List",
+                  type: "ENTRY",
+                  timestamp: new Date().toISOString()
                 }).catch(console.error);
-              } else if (now - livenessStartTimeRef.current > 7000) {
-                // Liveness Challenge Timeout
+              } else if (now - livenessStartTimeRef.current > 8000) {
+                // Liveness Challenge Timeout (8 seconds)
                 setStatusState("FAILED_TO_RECOGNISE");
                 setActiveMatch(null);
                 setActiveChallenge(null);
                 pendingMatchedStudentRef.current = null;
+                currentPersonIdRef.current = null;
                 playStateAudio("FAILED_TO_RECOGNISE");
               }
-            } else if (match?.student) {
-              const student = match.student;
-              const studentId = student.studentId || student.id;
+              // Do NOT fall through to recognition — return early from this frame
 
-              if (currentPersonIdRef.current !== studentId) {
-                currentPersonIdRef.current = studentId;
-                const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                setMatchTimestamp(ts);
+            } else {
+              // ── NORMAL RECOGNITION MODE ───────────────────────────────────────
+              const liveDesc = Array.from(det.descriptor);
+              const threshold = parseFloat(localStorage.getItem("face_match_threshold") || "0.48");
+              const match = findBestMatch(liveDesc, studentsRef.current, threshold);
 
-                if (student.suspended || student.isSuspended) {
-                  setStatusState("SUSPENDED"); 
-                  setActiveMatch(student); 
-                  playStateAudio("SUSPENDED");
-                } else {
-                  const ds = activeDatasetsRef.current;
-                  const matched = ds.length > 0 ? ds.find((d) => {
-                    if (d.studentIds && d.studentIds.length > 0) {
-                      return d.studentIds.includes(student.studentId || student.id);
-                    }
-                    const okC = d.classes?.length ? d.classes.includes(student.class) : true;
-                    const okS = d.sections?.length ? d.sections.includes(student.section) : true;
-                    const okG = d.groups?.length ? d.groups.includes(student.group) : true;
-                    return okC && okS && okG;
-                  }) : null;
+              if (match?.student) {
+                const student = match.student;
+                const studentId = student.studentId || student.id;
 
-                  if (!matched) {
-                    setStatusState("NOT_IN_SET"); 
-                    setActiveMatch(student); 
-                    playStateAudio("NOT_IN_SET");
+                if (currentPersonIdRef.current !== studentId) {
+                  currentPersonIdRef.current = studentId;
+                  const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                  setMatchTimestamp(ts);
+
+                  if (student.suspended || student.isSuspended) {
+                    setStatusState("SUSPENDED");
+                    setActiveMatch(student);
+                    playStateAudio("SUSPENDED");
                   } else {
-                    const today = new Date().toISOString().split("T")[0];
-                    const already = attendanceLogsRef.current.find(
-                      (l) => (l.studentId === studentId || l.studentId === student.id) && l.date === today
-                    );
-
-                    if (already) {
-                      setStatusState("ATTENDANCE_ALREADY_MARKED"); 
-                      setActiveMatch(student);
-                      if (already.formattedTime) setMatchTimestamp(already.formattedTime);
-                      playStateAudio("ATTENDANCE_ALREADY_MARKED");
-                    } else {
-                      let late = false;
-                      if (matched.timing?.maxEntryTime) {
-                        const [ch, cm] = matched.timing.maxEntryTime.split(":").map(Number);
-                        const d = new Date();
-                        late = d.getHours() > ch || (d.getHours() === ch && d.getMinutes() > cm);
+                    const ds = activeDatasetsRef.current;
+                    const matched = ds.length > 0 ? ds.find((d) => {
+                      if (d.studentIds && d.studentIds.length > 0) {
+                        return d.studentIds.includes(student.studentId || student.id);
                       }
-                      if (late) {
-                        setStatusState("TIME_EXCEEDED"); 
-                        setActiveMatch(student); 
-                        playStateAudio("TIME_EXCEEDED");
-                      } else {
-                        // Check if Liveness Verification is Enabled
-                        const liveMode = screenConfigRef.current?.livenessMode || "OFF";
-                        
-                        if (liveMode === "OFF") {
-                          setStatusState("ATTENDANCE_MARKED"); 
-                          setActiveMatch(student); 
-                          playStateAudio("ATTENDANCE_MARKED");
-                          recordAttendance({ 
-                            studentId, 
-                            name: student.name, 
-                            class: student.class, 
-                            section: student.section, 
-                            group: student.group, 
-                            datasetName: matched.name || "Master List", 
-                            type: "ENTRY", 
-                            timestamp: new Date().toISOString() 
-                          }).catch(console.error);
-                        } else {
-                          // Assign Random or Specific Liveness Challenge
-                          let challenge = "SMILE";
-                          if (liveMode === "SMILE_ONLY") {
-                            challenge = "SMILE";
-                          } else if (liveMode === "TURN_ONLY") {
-                            challenge = Math.random() > 0.5 ? "TURN_LEFT" : "TURN_RIGHT";
-                          } else if (liveMode === "BOTH_RANDOM") {
-                            const r = Math.random();
-                            challenge = r < 0.34 ? "SMILE" : r < 0.67 ? "TURN_LEFT" : "TURN_RIGHT";
-                          }
+                      const okC = d.classes?.length ? d.classes.includes(student.class) : true;
+                      const okS = d.sections?.length ? d.sections.includes(student.section) : true;
+                      const okG = d.groups?.length ? d.groups.includes(student.group) : true;
+                      return okC && okS && okG;
+                    }) : null;
 
-                          pendingMatchedStudentRef.current = student;
-                          livenessStartTimeRef.current = now;
+                    if (!matched) {
+                      setStatusState("NOT_IN_SET");
+                      setActiveMatch(student);
+                      playStateAudio("NOT_IN_SET");
+                    } else {
+                      const today = new Date().toISOString().split("T")[0];
+                      const already = attendanceLogsRef.current.find(
+                        (l) => (l.studentId === studentId || l.studentId === student.id) && l.date === today
+                      );
+
+                      if (already) {
+                        setStatusState("ATTENDANCE_ALREADY_MARKED");
+                        setActiveMatch(student);
+                        if (already.formattedTime) setMatchTimestamp(already.formattedTime);
+                        playStateAudio("ATTENDANCE_ALREADY_MARKED");
+                      } else {
+                        let late = false;
+                        if (matched.timing?.maxEntryTime) {
+                          const [ch, cm] = matched.timing.maxEntryTime.split(":").map(Number);
+                          const d = new Date();
+                          late = d.getHours() > ch || (d.getHours() === ch && d.getMinutes() > cm);
+                        }
+                        if (late) {
+                          setStatusState("TIME_EXCEEDED");
                           setActiveMatch(student);
-                          setActiveChallenge(challenge);
-                          setStatusState("VERIFYING_LIVENESS");
-                          playStateAudio("VERIFYING_LIVENESS");
+                          playStateAudio("TIME_EXCEEDED");
+                        } else {
+                          // Trigger liveness challenge if enabled
+                          const liveMode = screenConfigRef.current?.livenessMode || "OFF";
+
+                          if (liveMode === "OFF") {
+                            setStatusState("ATTENDANCE_MARKED");
+                            setActiveMatch(student);
+                            playStateAudio("ATTENDANCE_MARKED");
+                            recordAttendance({
+                              studentId,
+                              name: student.name,
+                              class: student.class,
+                              section: student.section,
+                              group: student.group,
+                              datasetName: matched.name || "Master List",
+                              type: "ENTRY",
+                              timestamp: new Date().toISOString()
+                            }).catch(console.error);
+                          } else {
+                            // Assign liveness challenge type
+                            let challenge = "SMILE";
+                            if (liveMode === "SMILE_ONLY") {
+                              challenge = "SMILE";
+                            } else if (liveMode === "TURN_ONLY") {
+                              challenge = Math.random() > 0.5 ? "TURN_LEFT" : "TURN_RIGHT";
+                            } else if (liveMode === "BOTH_RANDOM") {
+                              const r = Math.random();
+                              challenge = r < 0.34 ? "SMILE" : r < 0.67 ? "TURN_LEFT" : "TURN_RIGHT";
+                            }
+
+                            pendingMatchedStudentRef.current = student;
+                            livenessStartTimeRef.current = now;
+                            setActiveMatch(student);
+                            setActiveChallenge(challenge);
+                            setStatusState("VERIFYING_LIVENESS");
+                            playStateAudio("VERIFYING_LIVENESS");
+                          }
                         }
                       }
                     }
                   }
                 }
-              }
-            } else {
-              if (currentPersonIdRef.current !== "UNKNOWN") {
-                currentPersonIdRef.current = "UNKNOWN";
-                setStatusState("FAILED_TO_RECOGNISE");
-                setActiveMatch(null);
-                setActiveChallenge(null);
-                pendingMatchedStudentRef.current = null;
-                playStateAudio("FAILED_TO_RECOGNISE");
+              } else {
+                if (currentPersonIdRef.current !== "UNKNOWN") {
+                  currentPersonIdRef.current = "UNKNOWN";
+                  setStatusState("FAILED_TO_RECOGNISE");
+                  setActiveMatch(null);
+                  playStateAudio("FAILED_TO_RECOGNISE");
+                }
               }
             }
+
           } else {
-            if (now - lastFaceSeenRef.current > 1000 && (currentPersonIdRef.current !== null || statusStateRef.current !== "IDLE")) {
+            // No face detected
+            // Use a longer grace period during liveness challenge so a brief tracking
+            // loss from head turn doesn't abort the challenge prematurely.
+            const gracePeriod = statusStateRef.current === "VERIFYING_LIVENESS" ? 4000 : 1200;
+            if (now - lastFaceSeenRef.current > gracePeriod &&
+                (currentPersonIdRef.current !== null || statusStateRef.current !== "IDLE")) {
               currentPersonIdRef.current = null;
               setStatusState("IDLE");
               setActiveMatch(null);
@@ -606,10 +619,10 @@ export default function ScreeningPage() {
               pendingMatchedStudentRef.current = null;
             }
           }
-        } catch (e) { 
-          console.error("Detection loop error:", e); 
-        } finally { 
-          processing = false; 
+        } catch (e) {
+          console.error("Detection loop error:", e);
+        } finally {
+          processing = false;
         }
       }
       animationFrameRef.current = requestAnimationFrame(loop);
