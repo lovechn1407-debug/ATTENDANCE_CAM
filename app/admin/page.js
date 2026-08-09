@@ -5,6 +5,7 @@ import Sidebar from "@/components/admin/Sidebar";
 import StudentTable from "@/components/admin/StudentTable";
 import AddStudentModal from "@/components/admin/AddStudentModal";
 import BulkUploadModal from "@/components/admin/BulkUploadModal";
+import UpdatePhotosModal from "@/components/admin/UpdatePhotosModal";
 import DatasetManager from "@/components/admin/DatasetManager";
 import AttendanceRecords from "@/components/admin/AttendanceRecords";
 import SuspensionList from "@/components/admin/SuspensionList";
@@ -19,6 +20,9 @@ export default function AdminPage() {
   const [datasets, setDatasets] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isUpdatePhotosModalOpen, setIsUpdatePhotosModalOpen] = useState(false);
+  const [studentToEdit, setStudentToEdit] = useState(null);
+
   const [currentTime, setCurrentTime] = useState("");
   const [isUpdatingScreen, setIsUpdatingScreen] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
@@ -67,6 +71,16 @@ export default function AdminPage() {
 
   const handleDismissJob = (jobId) => {
     setRegistrationQueue(prev => prev.filter(j => j.id !== jobId));
+  };
+
+  const handleOpenAddModal = () => {
+    setStudentToEdit(null);
+    setIsAddModalOpen(true);
+  };
+
+  const handleEditStudent = (student) => {
+    setStudentToEdit(student);
+    setIsAddModalOpen(true);
   };
 
   return (
@@ -134,8 +148,10 @@ export default function AdminPage() {
           {activeTab === "students" && (
             <StudentTable
               students={students}
-              onOpenAddModal={() => setIsAddModalOpen(true)}
+              onOpenAddModal={handleOpenAddModal}
               onOpenBulkModal={() => setIsBulkModalOpen(true)}
+              onOpenUpdatePhotosModal={() => setIsUpdatePhotosModalOpen(true)}
+              onEditStudent={handleEditStudent}
             />
           )}
 
@@ -158,13 +174,24 @@ export default function AdminPage() {
       {/* Modals */}
       <AddStudentModal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setStudentToEdit(null);
+        }}
         onStartRegistration={handleStartRegistration}
+        studentToEdit={studentToEdit}
       />
 
       <BulkUploadModal
         isOpen={isBulkModalOpen}
         onClose={() => setIsBulkModalOpen(false)}
+      />
+
+      <UpdatePhotosModal
+        isOpen={isUpdatePhotosModalOpen}
+        onClose={() => setIsUpdatePhotosModalOpen(false)}
+        students={students}
+        onStartRegistration={handleStartRegistration}
       />
 
       {/* Bottom-Right Floating Progress Snackbar for Background Registration */}

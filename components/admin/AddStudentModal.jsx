@@ -14,7 +14,8 @@ import {
   Group as GroupIcon,
   RefreshCw,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Edit
 } from "lucide-react";
 
 const POSES = [
@@ -23,7 +24,7 @@ const POSES = [
   { step: 2, id: "right",  label: "Pose 3: Turn Right",  subtitle: "Turn head slightly to your right" }
 ];
 
-export default function AddStudentModal({ isOpen, onClose, onStartRegistration }) {
+export default function AddStudentModal({ isOpen, onClose, onStartRegistration, studentToEdit = null }) {
   const [studentId, setStudentId] = useState("");
   const [name, setName] = useState("");
   const [studentClass, setStudentClass] = useState("10");
@@ -34,41 +35,64 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
   const [capturedPoses, setCapturedPoses] = useState({ center: null, left: null, right: null });
   const [currentPoseIndex, setCurrentPoseIndex] = useState(0);
   const [useCameraMode, setUseCameraMode] = useState(false);
+  const [activeUploadPoseTarget, setActiveUploadPoseTarget] = useState("ALL"); // ALL | center | left | right
   const [errorMessage, setErrorMessage] = useState("");
 
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
-  // Generate random student ID when opening
+  // Initialize form state when opening or switching studentToEdit
   useEffect(() => {
     if (isOpen) {
-      setStudentId(`STU_${Math.floor(100000 + Math.random() * 900000)}`);
-      setName("");
-      setCapturedPoses({ center: null, left: null, right: null });
+      if (studentToEdit) {
+        setStudentId(studentToEdit.studentId || studentToEdit.id);
+        setName(studentToEdit.name || "");
+        setStudentClass(studentToEdit.class || "10");
+        setSection(studentToEdit.section || "A");
+        setGroup(studentToEdit.group || "A");
+        const existingPhoto = studentToEdit.photoUrl || null;
+        setCapturedPoses({
+          center: existingPhoto,
+          left: existingPhoto,
+          right: existingPhoto
+        });
+      } else {
+        setStudentId(`STU_${Math.floor(100000 + Math.random() * 900000)}`);
+        setName("");
+        setStudentClass("10");
+        setSection("A");
+        setGroup("A");
+        setCapturedPoses({ center: null, left: null, right: null });
+      }
       setCurrentPoseIndex(0);
       setUseCameraMode(false);
       setErrorMessage("");
     }
-  }, [isOpen]);
+  }, [isOpen, studentToEdit]);
 
   if (!isOpen) return null;
 
-  // Handle Image File Upload (Single file populates center pose)
+  // Handle Image File Upload (Target pose specific or ALL)
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
         const src = event.target.result;
-        setCapturedPoses({
-          center: src,
-          left: src,
-          right: src
-        });
+        if (activeUploadPoseTarget === "ALL") {
+          setCapturedPoses({ center: src, left: src, right: src });
+        } else {
+          setCapturedPoses(prev => ({ ...prev, [activeUploadPoseTarget]: src }));
+        }
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const triggerUploadForPose = (poseId) => {
+    setActiveUploadPoseTarget(poseId);
+    fileInputRef.current?.click();
   };
 
   // Start Live Webcam Stream (3:4 ratio)
@@ -110,7 +134,6 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
     canvas.height = videoRef.current.videoHeight || 640;
     const ctx = canvas.getContext("2d");
     
-    // Draw mirrored image
     ctx.translate(canvas.width, 0);
     ctx.scale(-1, 1);
     ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
@@ -118,12 +141,8 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     const poseKey = POSES[currentPoseIndex].id;
 
-    setCapturedPoses(prev => {
-      const updated = { ...prev, [poseKey]: dataUrl };
-      return updated;
-    });
+    setCapturedPoses(prev => ({ ...prev, [poseKey]: dataUrl }));
 
-    // Advance to next pose if available
     if (currentPoseIndex < POSES.length - 1) {
       setCurrentPoseIndex(prev => prev + 1);
     } else {
@@ -165,7 +184,6 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
     stopCamera();
     onClose();
 
-    // Trigger background processing with corner progress snackbar!
     if (onStartRegistration) {
       onStartRegistration(payload);
     }
@@ -173,6 +191,7 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
 
   const currentPose = POSES[currentPoseIndex];
   const isAllPosesCaptured = !!(capturedPoses.center && capturedPoses.left && capturedPoses.right);
+  const isEditMode = Boolean(studentToEdit);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto font-sans">
@@ -182,10 +201,11 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div>
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <User className="w-5 h-5 text-indigo-600" /> Add New Student Record
+              {isEditMode ? <Edit className="w-5 h-5 text-indigo-600" /> : <User className="w-5 h-5 text-indigo-600" />}
+              {isEditMode ? "Edit Student & Re-upload Photo" : "Add New Student Record"}
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Multi-angle biometric pose capture &amp; background processing
+              {isEditMode ? "Modify student credentials and update biometric reference photos" : "Multi-angle biometric pose capture & background processing"}
             </p>
           </div>
           <button
@@ -217,9 +237,10 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
               <input
                 type="text"
                 required
+                readOnly={isEditMode}
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${isEditMode ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""}`}
               />
             </div>
 
@@ -279,17 +300,16 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
           {/* Photo & Multi-Angle Pose Section */}
           <div className="space-y-3 pt-2">
             <label className="block text-xs font-semibold text-slate-700 flex items-center justify-between">
-              <span>Face Reference Photos (3:4 Ratio Multi-Angle Capture)</span>
+              <span>Face Reference Photos (Live 3-Pose or 3 File Uploads)</span>
               {isAllPosesCaptured && (
                 <span className="text-emerald-600 font-bold text-[11px] flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> All 3 Angles Captured
+                  <CheckCircle2 className="w-3.5 h-3.5" /> 3 Pose Photos Ready
                 </span>
               )}
             </label>
 
             {useCameraMode ? (
               <div className="space-y-3">
-                {/* Pose Instructions Bar */}
                 <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-between">
                   <div>
                     <div className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
@@ -316,7 +336,7 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
                 </div>
 
                 {/* 3:4 Aspect Ratio Camera Box */}
-                <div className="relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-300 aspect-[3/4] max-w-[280px] mx-auto flex items-center justify-center shadow-lg">
+                <div className="relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-300 aspect-[3/4] max-w-[260px] mx-auto flex items-center justify-center shadow-lg">
                   <video 
                     ref={videoRef} 
                     autoPlay 
@@ -325,7 +345,6 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
                     className="w-full h-full object-cover -scale-x-100" 
                   />
 
-                  {/* Face Alignment Reticle Overlay */}
                   <div className="absolute inset-4 border-2 border-dashed border-white/40 rounded-[40px] pointer-events-none flex items-center justify-center">
                     <span className="text-[10px] font-bold text-white/80 bg-black/60 px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-xs">
                       {currentPose.id.toUpperCase()} FACE ALIGNMENT
@@ -353,13 +372,13 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
               </div>
             ) : capturedPoses.center ? (
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
-                {/* Display 3 Pose Badges Side-by-Side in 3:4 Ratio */}
+                {/* 3 Pose Badges with Individual Re-Upload Triggers */}
                 <div className="grid grid-cols-3 gap-3">
                   {POSES.map((p) => {
                     const imgData = capturedPoses[p.id];
                     return (
-                      <div key={p.id} className="space-y-1 text-center">
-                        <div className="aspect-[3/4] rounded-xl bg-slate-900 overflow-hidden border border-slate-300 relative shadow-sm">
+                      <div key={p.id} className="space-y-1.5 text-center">
+                        <div className="aspect-[3/4] rounded-xl bg-slate-900 overflow-hidden border border-slate-300 relative shadow-sm group">
                           {imgData ? (
                             <img src={imgData} alt={p.label} className="w-full h-full object-cover" />
                           ) : (
@@ -367,19 +386,23 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
                               Pending
                             </div>
                           )}
-                          <span className="absolute bottom-1 left-1 right-1 bg-black/60 backdrop-blur-xs text-white text-[9px] font-bold uppercase rounded py-0.5 truncate">
+                          <span className="absolute bottom-1 left-1 right-1 bg-black/70 backdrop-blur-xs text-white text-[9px] font-bold uppercase rounded py-0.5 truncate">
                             {p.id}
                           </span>
                         </div>
-                        <span className="text-[10px] font-semibold text-slate-600 block truncate">
-                          {p.id === "center" ? "Front" : p.id === "left" ? "Left" : "Right"}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => triggerUploadForPose(p.id)}
+                          className="text-[10px] text-indigo-600 hover:underline font-semibold block w-full truncate"
+                        >
+                          Upload {p.id}
+                        </button>
                       </div>
                     );
                   })}
                 </div>
 
-                <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                <div className="flex justify-between items-center pt-2 border-t border-slate-200">
                   <span className="text-xs text-slate-500 font-medium">3 Pose Snapshots Captured</span>
                   <div className="flex gap-2">
                     <button
@@ -387,32 +410,54 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
                       onClick={handleRetakePoses}
                       className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 flex items-center gap-1.5"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" /> Re-take Poses
+                      <Camera className="w-3.5 h-3.5" /> Re-take 3 Poses
                     </button>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className="p-6 border-2 border-indigo-500/40 bg-indigo-50/20 hover:bg-indigo-50/50 rounded-2xl flex flex-col items-center justify-center text-center transition-all group cursor-pointer"
-                >
-                  <Camera className="w-7 h-7 text-indigo-600 mb-2 group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-extrabold text-slate-900">Take 3-Pose Camera Photos</span>
-                  <span className="text-[11px] text-slate-500 mt-0.5">3:4 Aspect Ratio (Center, Left, Right)</span>
-                </button>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    className="p-5 border-2 border-indigo-500/40 bg-indigo-50/20 hover:bg-indigo-50/50 rounded-2xl flex flex-col items-center justify-center text-center transition-all group cursor-pointer"
+                  >
+                    <Camera className="w-6 h-6 text-indigo-600 mb-1.5 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-extrabold text-slate-900">Take 3-Pose Camera Photos</span>
+                    <span className="text-[10px] text-slate-500 mt-0.5">3:4 Ratio (Center, Left, Right)</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-6 border-2 border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-100/50 rounded-2xl flex flex-col items-center justify-center text-center transition-all group cursor-pointer"
-                >
-                  <Upload className="w-6 h-6 text-slate-400 group-hover:text-slate-700 mb-2" />
-                  <span className="text-xs font-semibold text-slate-700">Upload Image File</span>
-                  <span className="text-[11px] text-slate-400 mt-0.5">JPG, PNG up to 5MB</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => triggerUploadForPose("ALL")}
+                    className="p-5 border-2 border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-100/50 rounded-2xl flex flex-col items-center justify-center text-center transition-all group cursor-pointer"
+                  >
+                    <Upload className="w-6 h-6 text-slate-400 group-hover:text-slate-700 mb-1.5" />
+                    <span className="text-xs font-semibold text-slate-700">Quick Upload 1 Image</span>
+                    <span className="text-[10px] text-slate-400 mt-0.5">Populates all 3 pose angles</span>
+                  </button>
+                </div>
+
+                {/* Individual 3 Pose Upload Buttons */}
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    Or Upload 3 Individual Pose Images:
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {POSES.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => triggerUploadForPose(p.id)}
+                        className="p-2.5 bg-white hover:bg-indigo-50 border border-slate-200 rounded-xl text-center text-xs font-semibold text-slate-700 hover:border-indigo-300 transition-all flex flex-col items-center gap-1"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                        <span className="capitalize text-[10px]">{p.id} Pose</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -428,7 +473,7 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
           {/* Footer Actions */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
             <span className="text-[11px] text-slate-400 font-medium">
-              * Processing runs in background snackbar
+              * Background processing status in snackbar
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -447,7 +492,7 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration }
                 className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-200 flex items-center gap-2 disabled:opacity-40"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>Save &amp; Process in Background</span>
+                <span>{isEditMode ? "Update & Process Background" : "Save & Process Background"}</span>
               </button>
             </div>
           </div>

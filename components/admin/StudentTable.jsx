@@ -11,15 +11,26 @@ import {
   AlertCircle, 
   UserCheck, 
   Building2,
-  Users
+  Users,
+  Camera,
+  Edit
 } from "lucide-react";
 import { deleteStudent } from "@/lib/firebase";
 
-export default function StudentTable({ students, onOpenAddModal, onOpenBulkModal }) {
+export default function StudentTable({ 
+  students, 
+  onOpenAddModal, 
+  onOpenBulkModal, 
+  onOpenUpdatePhotosModal,
+  onEditStudent 
+}) {
   const [searchTerm, setSearchTerm] = useState("");
   const [classFilter, setClassFilter] = useState("ALL");
   const [groupFilter, setGroupFilter] = useState("ALL");
   const [deletingId, setDeletingId] = useState(null);
+
+  // Missing photos count
+  const missingPhotosCount = students.filter(s => !s.photoUrl || s.photoUrl.trim() === "").length;
 
   // Extract unique classes
   const availableClasses = Array.from(
@@ -54,7 +65,7 @@ export default function StudentTable({ students, onOpenAddModal, onOpenBulkModal
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Top Banner & Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
@@ -62,14 +73,27 @@ export default function StudentTable({ students, onOpenAddModal, onOpenBulkModal
             <Users className="w-5 h-5 text-indigo-600" /> Master Student Database
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Total Enrolled: <span className="font-semibold text-slate-800">{students.length}</span> students across classes & groups.
+            Total Enrolled: <span className="font-semibold text-slate-800">{students.length}</span> students across classes &amp; groups.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Update Photos Button with Counter */}
+          <button
+            onClick={onOpenUpdatePhotosModal}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+              missingPhotosCount > 0
+                ? "bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-200"
+                : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+            }`}
+          >
+            <Camera className="w-4 h-4" />
+            <span>Update Photos ({missingPhotosCount})</span>
+          </button>
+
           <button
             onClick={onOpenBulkModal}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium text-sm flex items-center gap-2 transition-all"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium text-xs flex items-center gap-2 transition-all"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             <span>Bulk CSV Upload</span>
@@ -77,7 +101,7 @@ export default function StudentTable({ students, onOpenAddModal, onOpenBulkModal
 
           <button
             onClick={onOpenAddModal}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm flex items-center gap-2 shadow-sm shadow-indigo-200 transition-all"
+            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center gap-2 shadow-sm shadow-indigo-200 transition-all"
           >
             <UserPlus className="w-4 h-4" />
             <span>Add Student</span>
@@ -95,7 +119,7 @@ export default function StudentTable({ students, onOpenAddModal, onOpenBulkModal
             placeholder="Search by Name, ID, Class..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
           />
         </div>
 
@@ -136,16 +160,16 @@ export default function StudentTable({ students, onOpenAddModal, onOpenBulkModal
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-100 text-[12px] font-semibold text-slate-500 uppercase tracking-wider">
+              <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                 <th className="py-3.5 px-4">Student Info</th>
                 <th className="py-3.5 px-4">Student ID</th>
-                <th className="py-3.5 px-4">Class & Sec</th>
+                <th className="py-3.5 px-4">Class &amp; Sec</th>
                 <th className="py-3.5 px-4">Group</th>
                 <th className="py-3.5 px-4">Biometric Descriptor</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
               {filteredStudents.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400">
@@ -172,16 +196,16 @@ export default function StudentTable({ students, onOpenAddModal, onOpenBulkModal
                             <img
                               src={student.photoUrl}
                               alt={student.name}
-                              className="w-10 h-10 rounded-full object-cover border border-slate-200 bg-slate-100"
+                              className="w-9 h-9 rounded-full object-cover border border-slate-200 bg-slate-100"
                             />
                           ) : (
-                            <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm border border-indigo-200">
+                            <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-xs border border-amber-200">
                               {student.name.charAt(0).toUpperCase()}
                             </div>
                           )}
                           <div>
-                            <div className="font-semibold text-slate-900 leading-tight">{student.name}</div>
-                            <div className="text-xs text-slate-400">Added {new Date(student.createdAt).toLocaleDateString()}</div>
+                            <div className="font-bold text-slate-900 leading-tight">{student.name}</div>
+                            <div className="text-[10px] text-slate-400">Added {new Date(student.createdAt).toLocaleDateString()}</div>
                           </div>
                         </div>
                       </td>
@@ -193,7 +217,7 @@ export default function StudentTable({ students, onOpenAddModal, onOpenBulkModal
 
                       {/* Class & Sec */}
                       <td className="py-3 px-4">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
                           Class {student.class} - {student.section}
                         </span>
                       </td>
@@ -214,7 +238,7 @@ export default function StudentTable({ students, onOpenAddModal, onOpenBulkModal
                         {hasDescriptor ? (
                           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            128D Face & Eye Ready
+                            128D Face &amp; Eye Ready
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
@@ -224,16 +248,26 @@ export default function StudentTable({ students, onOpenAddModal, onOpenBulkModal
                         )}
                       </td>
 
-                      {/* Action */}
+                      {/* Action: Edit + Delete */}
                       <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => handleDelete(student.id, student.name)}
-                          disabled={deletingId === student.id}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete Student"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => onEditStudent && onEditStudent(student)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="Edit Student Credentials & Photo"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(student.id, student.name)}
+                            disabled={deletingId === student.id}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete Student"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
