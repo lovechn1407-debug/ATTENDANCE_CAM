@@ -13,7 +13,7 @@ import {
   verifyScreenPin,
   updateScreenHeartbeat
 } from "@/lib/firebase";
-import { detectFacesInVideo, findBestMatch, drawEyeAndLandmarkMesh, loadFaceApiModels } from "@/lib/faceApi";
+import { detectFacesInVideo, findBestMatch, drawEyeAndLandmarkMesh, loadFaceApiModels, analyzeLivenessPose } from "@/lib/faceApi";
 import { 
   CheckCircle2, 
   XCircle, 
@@ -31,12 +31,17 @@ import {
   Calendar, 
   Clock,
   Maximize,
-  Minimize
+  Minimize,
+  Smile,
+  Undo2,
+  Redo2,
+  ShieldCheck
 } from "lucide-react";
 
 // ─── Status theme map ─────────────────────────────────────────────────────────
 const THEMES = {
   IDLE:                     { glow: "rgba(255,255,255,0.04)", ring: "#ffffff22", label: "READY TO SCAN",      icon: null,          accent: "#ffffff33", barBg: "transparent" },
+  VERIFYING_LIVENESS:       { glow: "rgba(255,160,0,0.25)",   ring: "#FFB300",   label: "VERIFYING LIVENESS",  icon: ShieldCheck,   accent: "#FFB300",   barBg: "#FF8F00" },
   ATTENDANCE_MARKED:        { glow: "rgba(0,200,83,0.18)",   ring: "#00C853",   label: "ATTENDANCE MARKED",  icon: CheckCircle2,  accent: "#00C853",   barBg: "#00A82D" },
   ATTENDANCE_ALREADY_MARKED:{ glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "ATTENDANCE ALREADY MARKED", icon: Info,   accent: "#1E88E5",   barBg: "#1565C0" },
   NOT_IN_SET:               { glow: "rgba(30,136,229,0.18)", ring: "#1E88E5",   label: "NOT IN ATTENDANCE SET",   icon: Info,   accent: "#1E88E5",   barBg: "#1565C0" },
@@ -89,7 +94,13 @@ export default function ScreeningPage() {
   const [students, setStudents] = useState([]);
   const [activeDatasets, setActiveDatasets] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
-  const [screenConfig, setScreenConfig] = useState({ mode: "NORMAL", adminMessage: "", reloadId: 0, targetScreenIds: ["ALL"] });
+  const [screenConfig, setScreenConfig] = useState({ 
+    mode: "NORMAL", 
+    adminMessage: "", 
+    reloadId: 0, 
+    targetScreenIds: ["ALL"],
+    livenessMode: "OFF" // OFF | SMILE_ONLY | TURN_ONLY | BOTH_RANDOM
+  });
   const [currentTime, setCurrentTime] = useState("");
   const [currentDate, setCurrentDate] = useState("");
   const [isModelsLoaded, setIsModelsLoaded] = useState(false);
@@ -100,7 +111,14 @@ export default function ScreeningPage() {
   const [scanLine, setScanLine] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Connection & Hardware Hardware States
+  // Liveness Challenge State
+  const [activeChallenge, setActiveChallenge] = useState(null); // "SMILE" | "TURN_LEFT" | "TURN_RIGHT"
+  const livenessStartTimeRef = useRef(0);
+  const activeChallengeRef = useRef(null);
+  const pendingMatchedStudentRef = useRef(null);
+  useEffect(() => { activeChallengeRef.current = activeChallenge; }, [activeChallenge]);
+
+  // Connection & Hardware States
   const [isOnline, setIsOnline] = useState(true);
   const [hasCameraError, setHasCameraError] = useState(false);
 
@@ -135,10 +153,12 @@ export default function ScreeningPage() {
   const activeDatasetsRef = useRef([]);
   const attendanceLogsRef = useRef([]);
   const statusStateRef = useRef("IDLE");
+  const screenConfigRef = useRef(screenConfig);
   useEffect(() => { studentsRef.current = students; }, [students]);
   useEffect(() => { activeDatasetsRef.current = activeDatasets; }, [activeDatasets]);
   useEffect(() => { attendanceLogsRef.current = attendanceLogs; }, [attendanceLogs]);
   useEffect(() => { statusStateRef.current = statusState; }, [statusState]);
+  useEffect(() => { screenConfigRef.current = screenConfig; }, [screenConfig]);
 
   // Network Offline / Online listener
   useEffect(() => {
@@ -209,6 +229,11 @@ export default function ScreeningPage() {
         osc.frequency.setValueAtTime(350, now + 0.15);
         gain.gain.setValueAtTime(0.25, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+      } else if (state === "VERIFYING_LIVENESS") {
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(587.33, now);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
       } else {
         osc.type = "sawtooth";
         osc.frequency.setValueAtTime(300, now);
@@ -403,7 +428,7 @@ export default function ScreeningPage() {
     };
   }, [effectiveScreenMode, isScreenAuthenticated]);
 
-  // ─── Detection loop ───────────────────────────────────────────────────────
+  // ─── Detection loop with Physical Liveness Challenge ──────────────────────
   useEffect(() => {
     if (!isModelsLoaded || effectiveScreenMode !== "NORMAL" || !isScreenAuthenticated) return;
 
@@ -425,7 +450,51 @@ export default function ScreeningPage() {
             const threshold = parseFloat(localStorage.getItem("face_match_threshold") || "0.48");
             const match = findBestMatch(liveDesc, studentsRef.current, threshold);
 
-            if (match?.student) {
+            // Analyze liveness poses (Smile, Turn Left, Turn Right)
+            const liveness = analyzeLivenessPose(det);
+
+            // Handle active Liveness Challenge evaluation
+            if (statusStateRef.current === "VERIFYING_LIVENESS" && pendingMatchedStudentRef.current) {
+              const challenge = activeChallengeRef.current;
+              let isFulfilled = false;
+
+              if (challenge === "SMILE" && liveness.isSmiling) {
+                isFulfilled = true;
+              } else if (challenge === "TURN_LEFT" && liveness.isTurnedLeft) {
+                isFulfilled = true;
+              } else if (challenge === "TURN_RIGHT" && liveness.isTurnedRight) {
+                isFulfilled = true;
+              }
+
+              if (isFulfilled) {
+                const student = pendingMatchedStudentRef.current;
+                const studentId = student.studentId || student.id;
+                
+                setStatusState("ATTENDANCE_MARKED"); 
+                setActiveMatch(student); 
+                setActiveChallenge(null);
+                playStateAudio("ATTENDANCE_MARKED");
+
+                const matchedDs = activeDatasetsRef.current.find(d => d.active);
+                recordAttendance({ 
+                  studentId, 
+                  name: student.name, 
+                  class: student.class, 
+                  section: student.section, 
+                  group: student.group, 
+                  datasetName: matchedDs?.name || "Master List", 
+                  type: "ENTRY", 
+                  timestamp: new Date().toISOString() 
+                }).catch(console.error);
+              } else if (now - livenessStartTimeRef.current > 7000) {
+                // Liveness Challenge Timeout
+                setStatusState("FAILED_TO_RECOGNISE");
+                setActiveMatch(null);
+                setActiveChallenge(null);
+                pendingMatchedStudentRef.current = null;
+                playStateAudio("FAILED_TO_RECOGNISE");
+              }
+            } else if (match?.student) {
               const student = match.student;
               const studentId = student.studentId || student.id;
 
@@ -477,19 +546,42 @@ export default function ScreeningPage() {
                         setActiveMatch(student); 
                         playStateAudio("TIME_EXCEEDED");
                       } else {
-                        setStatusState("ATTENDANCE_MARKED"); 
-                        setActiveMatch(student); 
-                        playStateAudio("ATTENDANCE_MARKED");
-                        recordAttendance({ 
-                          studentId, 
-                          name: student.name, 
-                          class: student.class, 
-                          section: student.section, 
-                          group: student.group, 
-                          datasetName: matched.name || "Master List", 
-                          type: "ENTRY", 
-                          timestamp: new Date().toISOString() 
-                        }).catch(console.error);
+                        // Check if Liveness Verification is Enabled
+                        const liveMode = screenConfigRef.current?.livenessMode || "OFF";
+                        
+                        if (liveMode === "OFF") {
+                          setStatusState("ATTENDANCE_MARKED"); 
+                          setActiveMatch(student); 
+                          playStateAudio("ATTENDANCE_MARKED");
+                          recordAttendance({ 
+                            studentId, 
+                            name: student.name, 
+                            class: student.class, 
+                            section: student.section, 
+                            group: student.group, 
+                            datasetName: matched.name || "Master List", 
+                            type: "ENTRY", 
+                            timestamp: new Date().toISOString() 
+                          }).catch(console.error);
+                        } else {
+                          // Assign Random or Specific Liveness Challenge
+                          let challenge = "SMILE";
+                          if (liveMode === "SMILE_ONLY") {
+                            challenge = "SMILE";
+                          } else if (liveMode === "TURN_ONLY") {
+                            challenge = Math.random() > 0.5 ? "TURN_LEFT" : "TURN_RIGHT";
+                          } else if (liveMode === "BOTH_RANDOM") {
+                            const r = Math.random();
+                            challenge = r < 0.34 ? "SMILE" : r < 0.67 ? "TURN_LEFT" : "TURN_RIGHT";
+                          }
+
+                          pendingMatchedStudentRef.current = student;
+                          livenessStartTimeRef.current = now;
+                          setActiveMatch(student);
+                          setActiveChallenge(challenge);
+                          setStatusState("VERIFYING_LIVENESS");
+                          playStateAudio("VERIFYING_LIVENESS");
+                        }
                       }
                     }
                   }
@@ -500,6 +592,8 @@ export default function ScreeningPage() {
                 currentPersonIdRef.current = "UNKNOWN";
                 setStatusState("FAILED_TO_RECOGNISE");
                 setActiveMatch(null);
+                setActiveChallenge(null);
+                pendingMatchedStudentRef.current = null;
                 playStateAudio("FAILED_TO_RECOGNISE");
               }
             }
@@ -508,6 +602,8 @@ export default function ScreeningPage() {
               currentPersonIdRef.current = null;
               setStatusState("IDLE");
               setActiveMatch(null);
+              setActiveChallenge(null);
+              pendingMatchedStudentRef.current = null;
             }
           }
         } catch (e) { 
@@ -707,6 +803,51 @@ export default function ScreeningPage() {
                   className="absolute inset-0 w-full h-full pointer-events-none -scale-x-100"
                 />
 
+                {/* ─── LIVENESS CHALLENGE PROMPT OVERLAY (SMILE / TURN LEFT / TURN RIGHT) ─── */}
+                <AnimatePresence>
+                  {statusState === "VERIFYING_LIVENESS" && activeChallenge && (
+                    <motion.div 
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.8, opacity: 0 }}
+                      className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center z-20 space-y-2"
+                    >
+                      {activeChallenge === "SMILE" && (
+                        <>
+                          <div className="w-16 h-16 rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                            <Smile className="w-9 h-9 text-amber-300 animate-bounce" />
+                          </div>
+                          <span className="text-xs font-black tracking-widest text-amber-300 uppercase">
+                            SMILE TO CONFIRM
+                          </span>
+                        </>
+                      )}
+
+                      {activeChallenge === "TURN_LEFT" && (
+                        <>
+                          <div className="w-16 h-16 rounded-full bg-indigo-500/20 border-2 border-indigo-400 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                            <Undo2 className="w-9 h-9 text-indigo-300 animate-pulse" />
+                          </div>
+                          <span className="text-xs font-black tracking-widest text-indigo-300 uppercase">
+                            TURN HEAD LEFT
+                          </span>
+                        </>
+                      )}
+
+                      {activeChallenge === "TURN_RIGHT" && (
+                        <>
+                          <div className="w-16 h-16 rounded-full bg-indigo-500/20 border-2 border-indigo-400 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                            <Redo2 className="w-9 h-9 text-indigo-300 animate-pulse" />
+                          </div>
+                          <span className="text-xs font-black tracking-widest text-indigo-300 uppercase">
+                            TURN HEAD RIGHT
+                          </span>
+                        </>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 {/* Idle scan line sweep */}
                 {!isActive && (
                   <div
@@ -836,15 +977,12 @@ export default function ScreeningPage() {
                   style={{ willChange: "transform, opacity" }}
                   className="bg-[#121212] border border-neutral-800 p-5 rounded-2xl shadow-2xl space-y-4 relative overflow-hidden"
                 >
-                  {/* Subtle accent glow line at top edge */}
                   <div 
                     className="absolute top-0 left-0 right-0 h-[2px]"
                     style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}, transparent)` }}
                   />
 
-                  {/* Student info row */}
                   <div className="flex items-center gap-4">
-                    {/* Avatar */}
                     {activeMatch.photoUrl ? (
                       <img
                         src={activeMatch.photoUrl}
@@ -860,7 +998,6 @@ export default function ScreeningPage() {
                       </div>
                     )}
 
-                    {/* Name + ID Badge */}
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-white/10 border border-white/10 text-[11px] font-mono font-bold text-neutral-300">
                         <span>STU_ID:</span>
@@ -872,7 +1009,6 @@ export default function ScreeningPage() {
                     </div>
                   </div>
 
-                  {/* Class & Group Side-by-Side Vibrant Orange Pills */}
                   <div className="flex gap-3">
                     <div className="flex-1 bg-[#FF8F00] text-black font-black text-xs py-2.5 px-3 rounded-xl text-center uppercase tracking-wider shadow-md border border-amber-300/30">
                       {activeMatch.class} - {activeMatch.section}
@@ -882,9 +1018,8 @@ export default function ScreeningPage() {
                     </div>
                   </div>
 
-                  {/* Full Width Purple Timestamp Button */}
                   <div className="w-full bg-[#536DFE] text-white font-black text-sm py-2.5 rounded-xl text-center tracking-wider shadow-lg uppercase border border-indigo-400/30 flex items-center justify-center gap-2">
-                    <span>[{matchTimestamp}]</span>
+                    <span>[{matchTimestamp || "VERIFYING"}]</span>
                   </div>
                 </motion.div>
               ) : (
@@ -949,12 +1084,10 @@ export default function ScreeningPage() {
                 </div>
               )}
               
-              {/* Display PIN Dots */}
               <div className="w-full py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-center font-mono text-xl font-bold tracking-[0.4em] text-indigo-400">
                 {promptInputPin ? "•".repeat(promptInputPin.length) : <span className="text-neutral-600 text-xs font-sans tracking-normal">Enter PIN</span>}
               </div>
 
-              {/* On-Screen Touch Numpad */}
               <OnScreenNumpad value={promptInputPin} onChange={setPromptInputPin} />
 
               <div className="flex gap-2 pt-2">
@@ -973,7 +1106,7 @@ export default function ScreeningPage() {
       {/* ─── MODAL 2: SCREEN SETTINGS & CONTROL MODAL ─────────────────────── */}
       {isSettingsModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 text-white font-sans z-50">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#111111] border border-neutral-800 p-6 rounded-3xl max-w-md w-full shadow-2xl space-y-6">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#111111] border border-neutral-800 p-6 rounded-3xl max-w-md w-full shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
               <div className="flex items-center gap-3">
                 <Settings className="w-6 h-6 text-indigo-400" />
@@ -988,6 +1121,38 @@ export default function ScreeningPage() {
             </div>
 
             <div className="space-y-4">
+              {/* Liveness Verification Mode Control */}
+              <div className="p-4 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-3">
+                <div className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5"><Smile className="w-4 h-4 text-amber-400" /> Liveness Verification Check</span>
+                  <span className="text-[10px] font-mono text-amber-400">{screenConfig.livenessMode || "OFF"}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: "OFF", label: "OFF" },
+                    { id: "SMILE_ONLY", label: "SMILE ONLY" },
+                    { id: "TURN_ONLY", label: "TURN ONLY" },
+                    { id: "BOTH_RANDOM", label: "BOTH RANDOM" }
+                  ].map((lm) => (
+                    <button
+                      key={lm.id}
+                      type="button"
+                      onClick={async () => {
+                        await updateScreenConfig({ livenessMode: lm.id });
+                      }}
+                      className={`py-2 px-2 rounded-xl text-[10px] font-bold uppercase transition-all ${
+                        (screenConfig.livenessMode || "OFF") === lm.id
+                          ? "bg-amber-500 text-black shadow-md"
+                          : "bg-neutral-800 text-neutral-400 hover:bg-neutral-700"
+                      }`}
+                    >
+                      {lm.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Screen Mode Remote Override Section */}
               <div className="p-4 rounded-2xl bg-neutral-900 border border-neutral-800 space-y-3">
                 <div className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center justify-between">

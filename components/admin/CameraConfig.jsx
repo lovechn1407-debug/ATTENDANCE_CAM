@@ -20,7 +20,10 @@ import {
   Trash2,
   Lock,
   CheckSquare,
-  Square
+  Square,
+  Smile,
+  Undo2,
+  Redo2
 } from "lucide-react";
 import { 
   subscribeToScreenConfig, 
@@ -48,6 +51,7 @@ export default function CameraConfig() {
 
   // Screen State Override (Admin Controls)
   const [screenMode, setScreenMode] = useState("NORMAL"); // NORMAL | CLOSED | DISCONNECTED | NO_CAMERA | MAINTENANCE
+  const [livenessMode, setLivenessMode] = useState("OFF"); // OFF | SMILE_ONLY | TURN_ONLY | BOTH_RANDOM
   const [adminMessage, setAdminMessage] = useState("");
   const [selectedTargets, setSelectedTargets] = useState(["ALL"]);
   const [savingOverride, setSavingOverride] = useState(false);
@@ -62,6 +66,7 @@ export default function CameraConfig() {
         setScreenMode(config.mode || "NORMAL");
         setAdminMessage(config.adminMessage || "");
         setSelectedTargets(config.targetScreenIds || ["ALL"]);
+        setLivenessMode(config.livenessMode || "OFF");
       }
     });
 
@@ -165,7 +170,8 @@ export default function CameraConfig() {
       await updateScreenConfig({
         mode: screenMode,
         adminMessage: adminMessage.trim(),
-        targetScreenIds: selectedTargets
+        targetScreenIds: selectedTargets,
+        livenessMode: livenessMode
       });
       setOverrideSaved(true);
       setTimeout(() => setOverrideSaved(false), 3000);
@@ -213,14 +219,14 @@ export default function CameraConfig() {
   };
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="space-y-8 max-w-5xl font-sans">
       {/* Top Banner */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
           <Camera className="w-5 h-5 text-indigo-600" /> Screening Screen &amp; Connection System
         </h2>
         <p className="text-sm text-slate-500 mt-1">
-          Configure authorized client screens, set Screen PIN passwords, and remotely publish screen overrides with target screen checkboxes.
+          Configure authorized client screens, set Screen PIN passwords, liveness verification, and remotely publish screen overrides.
         </p>
       </div>
 
@@ -364,21 +370,21 @@ export default function CameraConfig() {
         </div>
       </div>
 
-      {/* Screen Mode Override Controls Section */}
+      {/* Screen Mode & Liveness Verification Settings Section */}
       <div className="bg-white p-6 rounded-2xl border border-indigo-200 shadow-sm space-y-6">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
             <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-              <Tv className="w-5 h-5 text-indigo-600" /> Remote Screen Mode Override (Selective Publishing)
+              <Tv className="w-5 h-5 text-indigo-600" /> Remote Screen Mode &amp; Liveness Config
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Select a screen state and check which specific screens should apply the override.
+              Select screen state, liveness challenge rules, and publish to active screening clients.
             </p>
           </div>
 
           {overrideSaved && (
             <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" /> Override Published!
+              <CheckCircle2 className="w-4 h-4" /> Config Published!
             </span>
           )}
         </div>
@@ -481,10 +487,55 @@ export default function CameraConfig() {
           </button>
         </div>
 
+        {/* Physical Liveness Verification Mode Selector */}
+        <div className="space-y-3 pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <Smile className="w-4 h-4 text-amber-500" /> Physical Liveness Verification Challenge
+            </label>
+            <span className="text-[11px] font-bold text-indigo-600">
+              Active: {livenessMode.replace("_", " ")}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500">
+            Require scanning users to physically smile or turn their head left/right to confirm attendance presence.
+          </p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+            {[
+              { id: "OFF", label: "OFF (Direct Match)", desc: "Instant attendance", icon: ShieldCheck },
+              { id: "SMILE_ONLY", label: "ONLY SMILE", desc: "Smile icon challenge", icon: Smile },
+              { id: "TURN_ONLY", label: "ONLY FACE TURN", desc: "Left / Right arrow", icon: Undo2 },
+              { id: "BOTH_RANDOM", label: "BOTH RANDOM", desc: "Random prompt", icon: Redo2 }
+            ].map((m) => {
+              const IconComp = m.icon;
+              const isSelected = livenessMode === m.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setLivenessMode(m.id)}
+                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                    isSelected
+                      ? "bg-indigo-50 border-indigo-600 text-indigo-950 ring-2 ring-indigo-500/20"
+                      : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  <IconComp className={`w-5 h-5 mb-2 ${isSelected ? "text-indigo-600" : "text-slate-400"}`} />
+                  <div>
+                    <div className="font-bold text-xs">{m.label}</div>
+                    <div className="text-[10px] text-slate-500">{m.desc}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Target Screen Checkbox Selection */}
-        <div className="space-y-2 pt-2 border-t border-slate-100">
+        <div className="space-y-2 pt-4 border-t border-slate-100">
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-            <span>Select Target Screens to Apply Override (Checkboxes)</span>
+            <span>Select Target Screens to Apply Config (Checkboxes)</span>
             <span className="text-[11px] text-indigo-600 font-normal">
               {selectedTargets.includes("ALL") ? "All Active Screens" : `${selectedTargets.length} Screen(s) Selected`}
             </span>
