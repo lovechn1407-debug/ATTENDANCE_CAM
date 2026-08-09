@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { uploadToImgBB } from "@/lib/imgbb";
 import { addStudent } from "@/lib/firebase";
-import { extractFaceDescriptor } from "@/lib/faceApi";
+import { extractFaceDescriptor, createOptimizedCanvas } from "@/lib/faceApi";
 
 export default function RegistrationSnackbar({ jobs, onJobComplete, onDismissJob }) {
   if (!jobs || jobs.length === 0) return null;
@@ -41,29 +41,44 @@ function SnackbarCard({ job, onJobComplete, onDismissJob }) {
 
     const processRegistration = async () => {
       try {
-        // Step 1: Extract 128D Face Descriptors from 3 pose photos
+        // Yield control to main UI thread
+        await new Promise((r) => setTimeout(r, 20));
+
         if (!isCancelled) {
           setProgress(15);
-          setStatusText("Analyzing 3D facial & eye landmarks...");
+          setStatusText("Analyzing 3D facial landmarks...");
         }
 
         const descriptors = [];
-        for (let i = 0; i < job.photos.length; i++) {
+        const poseCount = job.photos.length;
+
+        for (let i = 0; i < poseCount; i++) {
           const photoSrc = job.photos[i];
-          if (!photoSrc) continue;
+          if (!photoSrc || isCancelled) continue;
+
+          // Yield UI thread between photo processing
+          await new Promise((r) => setTimeout(r, 16));
 
           const tempImg = new Image();
           tempImg.crossOrigin = "anonymous";
           tempImg.src = photoSrc;
 
-          await new Promise((resolve, reject) => {
+          await new Promise((resolve) => {
             tempImg.onload = resolve;
             tempImg.onerror = resolve; // Graceful skip
           });
 
-          const result = await extractFaceDescriptor(tempImg);
+          // Downscale to 320px target for lightning fast feature extraction
+          const optimizedCanvas = createOptimizedCanvas(tempImg, 320);
+
+          const result = await extractFaceDescriptor(optimizedCanvas);
           if (result && result.descriptor) {
             descriptors.push(result.descriptor);
+          }
+
+          if (!isCancelled) {
+            const stepProgress = Math.round(15 + ((i + 1) / poseCount) * 35);
+            setProgress(stepProgress);
           }
         }
 
@@ -81,21 +96,25 @@ function SnackbarCard({ job, onJobComplete, onDismissJob }) {
           finalDescriptor[i] = sum / descriptors.length;
         }
 
+        await new Promise((r) => setTimeout(r, 20));
+
         if (!isCancelled) {
-          setProgress(50);
+          setProgress(55);
           setStatusText("Uploading reference photo to ImgBB...");
         }
 
-        // Step 2: Upload primary photo to ImgBB
+        // Upload primary photo to ImgBB
         const primaryPhoto = job.photos[0];
         const imgbbResult = await uploadToImgBB(primaryPhoto);
 
+        await new Promise((r) => setTimeout(r, 20));
+
         if (!isCancelled) {
-          setProgress(80);
+          setProgress(85);
           setStatusText("Saving student record to Firebase RTDB...");
         }
 
-        // Step 3: Save Student to Firebase Realtime Database
+        // Save Student to Firebase Realtime Database
         await addStudent({
           studentId: job.studentId,
           name: job.name,
