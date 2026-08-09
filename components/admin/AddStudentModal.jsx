@@ -42,6 +42,15 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
+  // Stop Webcam Stream
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setUseCameraMode(false);
+  };
+
   // Initialize form state when opening or switching studentToEdit
   useEffect(() => {
     if (isOpen) {
@@ -115,15 +124,6 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
       setErrorMessage("Could not access camera: " + err.message);
       setUseCameraMode(false);
     }
-  };
-
-  // Stop Webcam Stream
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setUseCameraMode(false);
   };
 
   // Capture Snapshot for Current Pose Step

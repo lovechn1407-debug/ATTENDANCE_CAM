@@ -18,7 +18,7 @@ import {
   Check
 } from "lucide-react";
 
-export default function UpdatePhotosModal({ isOpen, onClose, students, onStartRegistration }) {
+export default function UpdatePhotosModal({ isOpen, onClose, students = [], onStartRegistration }) {
   const [selectedClass, setSelectedClass] = useState("ALL");
   const [selectedGroup, setSelectedGroup] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
@@ -37,31 +37,13 @@ export default function UpdatePhotosModal({ isOpen, onClose, students, onStartRe
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Filter students with missing photoUrl
-  const missingStudents = students.filter(s => !s.photoUrl || s.photoUrl.trim() === "");
-
-  // Filtered missing students
-  const filteredMissing = missingStudents.filter(s => {
-    const matchesClass = selectedClass === "ALL" || s.class === selectedClass;
-    const matchesGroup = selectedGroup === "ALL" || s.group === selectedGroup;
-    const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          s.studentId.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesClass && matchesGroup && matchesSearch;
-  });
-
-  const availableClasses = Array.from(new Set(missingStudents.map(s => s.class).filter(Boolean))).sort();
-
-  useEffect(() => {
-    if (!isOpen) {
-      stopCamera();
-      setIsWizardActive(false);
-      setWizardQueue([]);
-      setWizardIndex(0);
-      setCapturedPoses({ center: null, left: null, right: null });
+  // Stop Webcam Stream Helper
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
+  };
 
   // Start Camera for current wizard student
   const startCamera = async () => {
@@ -83,12 +65,31 @@ export default function UpdatePhotosModal({ isOpen, onClose, students, onStartRe
     }
   };
 
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
+  // Filter students with missing photoUrl
+  const missingStudents = Array.isArray(students) ? students.filter(s => !s.photoUrl || s.photoUrl.trim() === "") : [];
+
+  // Filtered missing students
+  const filteredMissing = missingStudents.filter(s => {
+    const matchesClass = selectedClass === "ALL" || s.class === selectedClass;
+    const matchesGroup = selectedGroup === "ALL" || s.group === selectedGroup;
+    const matchesSearch = (s.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (s.studentId || "").toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesClass && matchesGroup && matchesSearch;
+  });
+
+  const availableClasses = Array.from(new Set(missingStudents.map(s => s.class).filter(Boolean))).sort();
+
+  useEffect(() => {
+    if (!isOpen) {
+      stopCamera();
+      setIsWizardActive(false);
+      setWizardQueue([]);
+      setWizardIndex(0);
+      setCapturedPoses({ center: null, left: null, right: null });
     }
-  };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   // Start Wizard Sequence for selected list
   const handleStartWizard = () => {
