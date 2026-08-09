@@ -11,7 +11,8 @@ import {
   ShieldCheck, 
   ChevronRight,
   Sparkles,
-  UserX
+  UserX,
+  UserCheck
 } from "lucide-react";
 
 export default function Sidebar({ activeTab, setActiveTab }) {
@@ -43,6 +44,13 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       description: "Manage suspended students & block entry",
       icon: UserX,
       badge: "Blocked"
+    },
+    {
+      id: "staff",
+      label: "Staff Management",
+      description: "Create staff accounts & assign dataset access",
+      icon: UserCheck,
+      badge: "Access"
     },
     {
       id: "camera",

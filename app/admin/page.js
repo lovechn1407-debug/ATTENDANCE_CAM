@@ -8,6 +8,7 @@ import BulkUploadModal from "@/components/admin/BulkUploadModal";
 import UpdatePhotosModal from "@/components/admin/UpdatePhotosModal";
 import DatasetManager from "@/components/admin/DatasetManager";
 import AttendanceRecords from "@/components/admin/AttendanceRecords";
+import StaffManager from "@/components/admin/StaffManager";
 import SuspensionList from "@/components/admin/SuspensionList";
 import CameraConfig from "@/components/admin/CameraConfig";
 import RegistrationSnackbar from "@/components/admin/RegistrationSnackbar";
@@ -15,7 +16,7 @@ import { subscribeToStudents, subscribeToDatasets, triggerScreenReload } from "@
 import { Clock, RefreshCw, CheckCircle2, Loader2 } from "lucide-react";
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState("students"); // "students" | "datasets" | "attendance" | "suspension" | "camera"
+  const [activeTab, setActiveTab] = useState("students"); // "students" | "datasets" | "attendance" | "suspension" | "staff" | "camera"
   const [students, setStudents] = useState([]);
   const [datasets, setDatasets] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -98,6 +99,7 @@ export default function AdminPage() {
               {activeTab === "datasets" && "Entry / Exit Datasets"}
               {activeTab === "attendance" && "Attendance Records & Setwise Results"}
               {activeTab === "suspension" && "Student Suspension Management"}
+              {activeTab === "staff" && "Staff Accounts & Dataset Access"}
               {activeTab === "camera" && "Hardware Camera & Biometrics"}
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -165,6 +167,10 @@ export default function AdminPage() {
 
           {activeTab === "suspension" && (
             <SuspensionList students={students} />
+          )}
+
+          {activeTab === "staff" && (
+            <StaffManager datasets={datasets} />
           )}
 
           {activeTab === "camera" && <CameraConfig />}
