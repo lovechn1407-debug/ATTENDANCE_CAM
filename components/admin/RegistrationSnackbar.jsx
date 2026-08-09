@@ -1,17 +1,28 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { 
   Loader2, 
   CheckCircle2, 
   AlertCircle, 
   X, 
-  UserCheck,
   Sparkles
 } from "lucide-react";
 import { uploadToImgBB } from "@/lib/imgbb";
 import { addStudent } from "@/lib/firebase";
-import { extractFaceDescriptor, createOptimizedCanvas } from "@/lib/faceApi";
+import { extractFaceDescriptor } from "@/lib/faceApi";
+
+// Yields control back to the browser event loop so the UI stays responsive
+// during heavy CPU-bound face-api inference tasks.
+function yieldToMain() {
+  if (typeof scheduler !== "undefined" && scheduler.yield) {
+    return scheduler.yield();
+  }
+  if (typeof requestIdleCallback !== "undefined") {
+    return new Promise((resolve) => requestIdleCallback(resolve, { timeout: 50 }));
+  }
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 export default function RegistrationSnackbar({ jobs, onJobComplete, onDismissJob }) {
   if (!jobs || jobs.length === 0) return null;
@@ -31,33 +42,31 @@ export default function RegistrationSnackbar({ jobs, onJobComplete, onDismissJob
 }
 
 function SnackbarCard({ job, onJobComplete, onDismissJob }) {
-  const [progress, setProgress] = useState(job.progress || 10);
+  const [progress, setProgress] = useState(job.progress || 5);
   const [status, setStatus] = useState(job.status || "processing"); // processing | success | error
-  const [statusText, setStatusText] = useState(job.statusText || "Extracting 3D facial landmarks...");
+  const [statusText, setStatusText] = useState("Queuing for processing...");
   const [errorMessage, setErrorMessage] = useState("");
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
-    let isCancelled = false;
+    cancelledRef.current = false;
 
     const processRegistration = async () => {
       try {
-        // Yield control to main UI thread
-        await new Promise((r) => setTimeout(r, 20));
+        // ── STEP 0: Yield immediately so the UI can render the snackbar before we block ──
+        await yieldToMain();
+        if (cancelledRef.current) return;
 
-        if (!isCancelled) {
-          setProgress(15);
-          setStatusText("Analyzing 3D facial landmarks...");
-        }
+        // ── STEP 1: Load images ───────────────────────────────────────────────────
+        setProgress(10);
+        setStatusText("Loading captured pose images...");
+        await yieldToMain();
+        if (cancelledRef.current) return;
 
-        const descriptors = [];
-        const poseCount = job.photos.length;
-
-        for (let i = 0; i < poseCount; i++) {
+        const loadedImages = [];
+        for (let i = 0; i < job.photos.length; i++) {
           const photoSrc = job.photos[i];
-          if (!photoSrc || isCancelled) continue;
-
-          // Yield UI thread between photo processing
-          await new Promise((r) => setTimeout(r, 16));
+          if (!photoSrc) continue;
 
           const tempImg = new Image();
           tempImg.crossOrigin = "anonymous";
@@ -65,28 +74,51 @@ function SnackbarCard({ job, onJobComplete, onDismissJob }) {
 
           await new Promise((resolve) => {
             tempImg.onload = resolve;
-            tempImg.onerror = resolve; // Graceful skip
+            tempImg.onerror = resolve; // graceful skip
           });
 
-          // Downscale to 320px target for lightning fast feature extraction
-          const optimizedCanvas = createOptimizedCanvas(tempImg, 320);
+          // Yield after each image load to keep the UI from stuttering
+          await yieldToMain();
+          loadedImages.push(tempImg);
+        }
 
-          const result = await extractFaceDescriptor(optimizedCanvas);
+        if (cancelledRef.current) return;
+
+        // ── STEP 2: Face descriptor extraction (heavy CPU work, yield between each pose) ──
+        setProgress(18);
+        setStatusText("Analyzing face pose 1 of 3...");
+        await yieldToMain();
+
+        const descriptors = [];
+        for (let i = 0; i < loadedImages.length; i++) {
+          if (cancelledRef.current) return;
+
+          setProgress(18 + Math.round((i / loadedImages.length) * 25));
+          setStatusText(`Extracting face landmarks — pose ${i + 1} of ${loadedImages.length}...`);
+
+          // Yield BEFORE heavy inference so browser can paint status update
+          await yieldToMain();
+
+          const result = await extractFaceDescriptor(loadedImages[i]);
           if (result && result.descriptor) {
             descriptors.push(result.descriptor);
           }
 
-          if (!isCancelled) {
-            const stepProgress = Math.round(15 + ((i + 1) / poseCount) * 35);
-            setProgress(stepProgress);
-          }
+          // Yield AFTER inference too
+          await yieldToMain();
         }
 
         if (descriptors.length === 0) {
-          throw new Error("Could not detect face in captured photos. Please re-take photos with a clear face.");
+          throw new Error("Could not detect a face in the captured photos. Please re-take with better lighting and a clear, centred face.");
         }
 
-        // Average descriptors for maximum 3D pose accuracy
+        if (cancelledRef.current) return;
+
+        // ── STEP 3: Average descriptors for multi-angle accuracy ──────────────────
+        setProgress(46);
+        setStatusText("Merging multi-angle biometric data...");
+        await yieldToMain();
+
         const finalDescriptor = new Array(128).fill(0);
         for (let i = 0; i < 128; i++) {
           let sum = 0;
@@ -96,25 +128,23 @@ function SnackbarCard({ job, onJobComplete, onDismissJob }) {
           finalDescriptor[i] = sum / descriptors.length;
         }
 
-        await new Promise((r) => setTimeout(r, 20));
+        await yieldToMain();
+        if (cancelledRef.current) return;
 
-        if (!isCancelled) {
-          setProgress(55);
-          setStatusText("Uploading reference photo to ImgBB...");
-        }
+        // ── STEP 4: Upload photo to ImgBB (network I/O — non-blocking) ───────────
+        setProgress(52);
+        setStatusText("Uploading reference photo to ImgBB...");
+        await yieldToMain();
 
-        // Upload primary photo to ImgBB
-        const primaryPhoto = job.photos[0];
-        const imgbbResult = await uploadToImgBB(primaryPhoto);
+        const imgbbResult = await uploadToImgBB(job.photos[0]);
 
-        await new Promise((r) => setTimeout(r, 20));
+        if (cancelledRef.current) return;
 
-        if (!isCancelled) {
-          setProgress(85);
-          setStatusText("Saving student record to Firebase RTDB...");
-        }
+        // ── STEP 5: Save to Firebase RTDB ─────────────────────────────────────────
+        setProgress(82);
+        setStatusText("Saving record to Firebase database...");
+        await yieldToMain();
 
-        // Save Student to Firebase Realtime Database
         await addStudent({
           studentId: job.studentId,
           name: job.name,
@@ -125,27 +155,31 @@ function SnackbarCard({ job, onJobComplete, onDismissJob }) {
           descriptor: finalDescriptor
         });
 
-        if (!isCancelled) {
-          setProgress(100);
-          setStatus("success");
-          setStatusText("Student successfully registered!");
-          if (onJobComplete) onJobComplete(job.id);
-        }
+        if (cancelledRef.current) return;
+
+        // ── STEP 6: Done ──────────────────────────────────────────────────────────
+        setProgress(100);
+        setStatus("success");
+        setStatusText("Student successfully registered!");
+        if (onJobComplete) onJobComplete(job.id);
+
       } catch (err) {
         console.error("Background registration error:", err);
-        if (!isCancelled) {
+        if (!cancelledRef.current) {
           setStatus("error");
           setErrorMessage(err.message || "Registration failed");
         }
       }
     };
 
-    processRegistration();
+    // Defer start by 1 frame so the snackbar card renders first before CPU load
+    const startTimer = setTimeout(processRegistration, 80);
 
     return () => {
-      isCancelled = true;
+      cancelledRef.current = true;
+      clearTimeout(startTimer);
     };
-  }, [job]);
+  }, [job.id]);
 
   return (
     <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/80 text-white p-4 rounded-2xl shadow-2xl space-y-3 animate-in slide-in-from-bottom-5 duration-300">
@@ -171,16 +205,16 @@ function SnackbarCard({ job, onJobComplete, onDismissJob }) {
       {status === "processing" && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-[11px]">
-            <span className="text-indigo-300 font-medium flex items-center gap-1.5">
-              <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
-              <span>{statusText}</span>
+            <span className="text-indigo-300 font-medium flex items-center gap-1.5 min-w-0">
+              <Loader2 className="w-3 h-3 animate-spin text-indigo-400 shrink-0" />
+              <span className="truncate">{statusText}</span>
             </span>
-            <span className="font-mono font-bold text-indigo-400">{progress}%</span>
+            <span className="font-mono font-bold text-indigo-400 ml-2 shrink-0">{progress}%</span>
           </div>
 
           <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/60">
             <div
-              className="h-full bg-indigo-500 rounded-full transition-all duration-300 shadow-sm"
+              className="h-full bg-indigo-500 rounded-full transition-all duration-200 shadow-sm"
               style={{ width: `${progress}%` }}
             />
           </div>
