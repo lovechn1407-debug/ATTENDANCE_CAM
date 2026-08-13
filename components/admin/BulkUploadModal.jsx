@@ -72,10 +72,10 @@ export default function BulkUploadModal({ isOpen, onClose }) {
   };
 
   const downloadSampleCSV = () => {
-    const sampleCSV = `studentId,name,department,course,branch,section,group,photoUrl
-STU_1001,John Doe,Computer Science,B.Tech,CSE,A,G1,https://i.ibb.co/sample1.jpg
-STU_1002,Jane Smith,Computer Science,B.Tech,CSE,A,G2,https://i.ibb.co/sample2.jpg
-STU_1003,Robert Brown,Electronics,M.Tech,ECE,B,G1,https://i.ibb.co/sample3.jpg`;
+    const sampleCSV = `studentId,name,department,course,branch,section,group,subjects,photoUrl
+STU_1001,John Doe,Computer Science,B.Tech,CSE,A,G1,Data Structures; Operating Systems,https://i.ibb.co/sample1.jpg
+STU_1002,Jane Smith,Computer Science,B.Tech,CSE,A,G2,Data Structures; Python,https://i.ibb.co/sample2.jpg
+STU_1003,Robert Brown,Electronics,M.Tech,ECE,B,G1,Signals and Systems; Digital Logic,https://i.ibb.co/sample3.jpg`;
 
     const blob = new Blob([sampleCSV], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);

@@ -58,8 +58,8 @@ export default function DatasetHeader({ activeSession, screenId, currentTime }) 
               <User className="w-3.5 h-3.5 text-indigo-400" />
               <span>Faculty: <strong className="text-white">{activeSession.staffName}</strong></span>
             </div>
-            <div className="text-[11px] font-mono text-slate-400">
-              Roster: {activeSession.datasetName} ({activeSession.branch || "CSE"} Sec-{activeSession.section || "A"})
+            <div className="text-[11px] font-mono text-slate-300">
+              Class: {activeSession.course || "B.Tech"} {activeSession.branch || "CSE"}-{activeSession.section || "A"} ({activeSession.group || "ALL"}) • {activeSession.studentIds?.length || 0} Students
             </div>
           </div>
         </div>

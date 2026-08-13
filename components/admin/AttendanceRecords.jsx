@@ -23,18 +23,20 @@ import {
 } from "lucide-react";
 import { subscribeToAttendanceLogs, recordAttendance, removeAttendanceLog } from "@/lib/firebase";
 
-export default function AttendanceRecords({ datasets = [], students = [] }) {
+export default function AttendanceRecords({ students = [] }) {
   const [logs, setLogs] = useState([]);
   const [viewMode, setViewMode] = useState("LOGS"); // "LOGS" | "SETWISE"
   
   // Log Stream filters
   const [searchTerm, setSearchTerm] = useState("");
-  const [datasetFilter, setDatasetFilter] = useState("ALL");
+  const [departmentFilter, setDepartmentFilter] = useState("ALL");
+  const [courseFilter, setCourseFilter] = useState("ALL");
+  const [branchFilter, setBranchFilter] = useState("ALL");
+  const [sectionFilter, setSectionFilter] = useState("ALL");
+  const [groupFilter, setGroupFilter] = useState("ALL");
+  const [subjectFilter, setSubjectFilter] = useState("ALL");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [dateFilter, setDateFilter] = useState("");
-
-  // Setwise View selection
-  const [selectedDatasetId, setSelectedDatasetId] = useState(datasets[0]?.id || "ALL");
 
   // Realtime subscription to logs
   useEffect(() => {
@@ -42,26 +44,29 @@ export default function AttendanceRecords({ datasets = [], students = [] }) {
     return () => unsub();
   }, []);
 
-  // Sync selected dataset when datasets load
-  useEffect(() => {
-    if (datasets.length > 0 && selectedDatasetId === "ALL") {
-      setSelectedDatasetId(datasets[0].id);
-    }
-  }, [datasets]);
-
   // Filter logs logic
   const filteredLogs = logs.filter((log) => {
+    const query = searchTerm.toLowerCase();
     const matchesSearch =
-      (log.name && log.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (log.studentId && log.studentId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (log.class && log.class.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (log.section && log.section.toLowerCase().includes(searchTerm.toLowerCase()));
+      (log.name && log.name.toLowerCase().includes(query)) ||
+      (log.studentId && log.studentId.toLowerCase().includes(query)) ||
+      (log.department && log.department.toLowerCase().includes(query)) ||
+      (log.course && log.course.toLowerCase().includes(query)) ||
+      (log.branch && log.branch.toLowerCase().includes(query)) ||
+      (log.section && log.section.toLowerCase().includes(query)) ||
+      (log.group && log.group.toLowerCase().includes(query)) ||
+      (log.subject && log.subject.toLowerCase().includes(query));
 
-    const matchesDataset = datasetFilter === "ALL" || log.datasetName === datasetFilter;
+    const matchesDept = departmentFilter === "ALL" || log.department === departmentFilter;
+    const matchesCourse = courseFilter === "ALL" || log.course === courseFilter || log.class === courseFilter;
+    const matchesBranch = branchFilter === "ALL" || log.branch === branchFilter;
+    const matchesSection = sectionFilter === "ALL" || log.section === sectionFilter;
+    const matchesGroup = groupFilter === "ALL" || log.group === groupFilter;
+    const matchesSubject = subjectFilter === "ALL" || log.subject === subjectFilter;
     const matchesType = typeFilter === "ALL" || log.type === typeFilter;
     const matchesDate = !dateFilter || log.date === dateFilter;
 
-    return matchesSearch && matchesDataset && matchesType && matchesDate;
+    return matchesSearch && matchesDept && matchesCourse && matchesBranch && matchesSection && matchesGroup && matchesSubject && matchesType && matchesDate;
   });
 
   // Calculate quick analytics

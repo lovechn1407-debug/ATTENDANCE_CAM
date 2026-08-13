@@ -25,18 +25,18 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       badge: "Master"
     },
     {
-      id: "datasets",
-      label: "Entry/Exit Configuration",
-      description: "Filter groups & define active timing slots",
-      icon: Sliders,
-      badge: "Rules"
-    },
-    {
       id: "attendance",
       label: "Attendance Records",
-      description: "View logs grouped by dataset & export CSV",
+      description: "View logs grouped by college period & export CSV",
       icon: ClipboardList,
       badge: "Logs"
+    },
+    {
+      id: "staff",
+      label: "Staff Allotment & Accounts",
+      description: "Manage faculty & assign student group teaching allotments",
+      icon: UserCheck,
+      badge: "Allot"
     },
     {
       id: "suspension",
@@ -44,13 +44,6 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       description: "Manage suspended students & block entry",
       icon: UserX,
       badge: "Blocked"
-    },
-    {
-      id: "staff",
-      label: "Staff Management",
-      description: "Create staff accounts & assign dataset access",
-      icon: UserCheck,
-      badge: "Access"
     },
     {
       id: "camera",

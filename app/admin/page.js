@@ -6,19 +6,17 @@ import StudentTable from "@/components/admin/StudentTable";
 import AddStudentModal from "@/components/admin/AddStudentModal";
 import BulkUploadModal from "@/components/admin/BulkUploadModal";
 import UpdatePhotosModal from "@/components/admin/UpdatePhotosModal";
-import DatasetManager from "@/components/admin/DatasetManager";
 import AttendanceRecords from "@/components/admin/AttendanceRecords";
 import StaffManager from "@/components/admin/StaffManager";
 import SuspensionList from "@/components/admin/SuspensionList";
 import CameraConfig from "@/components/admin/CameraConfig";
 import RegistrationSnackbar from "@/components/admin/RegistrationSnackbar";
-import { subscribeToStudents, subscribeToDatasets, subscribeToStaffs, triggerScreenReload } from "@/lib/firebase";
+import { subscribeToStudents, subscribeToStaffs, triggerScreenReload } from "@/lib/firebase";
 import { Clock, RefreshCw, CheckCircle2, Loader2 } from "lucide-react";
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState("students"); // "students" | "datasets" | "attendance" | "suspension" | "staff" | "camera"
+  const [activeTab, setActiveTab] = useState("students"); // "students" | "attendance" | "suspension" | "staff" | "camera"
   const [students, setStudents] = useState([]);
-  const [datasets, setDatasets] = useState([]);
   const [staffs, setStaffs] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -35,7 +33,6 @@ export default function AdminPage() {
   // Realtime Subscriptions
   useEffect(() => {
     const unsubStudents = subscribeToStudents(setStudents);
-    const unsubDatasets = subscribeToDatasets(setDatasets);
     const unsubStaffs = subscribeToStaffs(setStaffs);
 
     const timer = setInterval(() => {
@@ -44,7 +41,6 @@ export default function AdminPage() {
 
     return () => {
       unsubStudents();
-      unsubDatasets();
       unsubStaffs();
       clearInterval(timer);
     };
@@ -160,12 +156,8 @@ export default function AdminPage() {
             />
           )}
 
-          {activeTab === "datasets" && (
-            <DatasetManager datasets={datasets} students={students} staffs={staffs} />
-          )}
-
           {activeTab === "attendance" && (
-            <AttendanceRecords datasets={datasets} students={students} />
+            <AttendanceRecords students={students} />
           )}
 
           {activeTab === "suspension" && (
@@ -173,7 +165,7 @@ export default function AdminPage() {
           )}
 
           {activeTab === "staff" && (
-            <StaffManager datasets={datasets} />
+            <StaffManager students={students} />
           )}
 
           {activeTab === "camera" && <CameraConfig />}

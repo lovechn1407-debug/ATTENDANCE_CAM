@@ -58,18 +58,21 @@ export default function StaffPanelPage() {
 
   // Realtime Data
   const [students, setStudents] = useState([]);
-  const [datasets, setDatasets] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [activeScreeningSessions, setActiveScreeningSessions] = useState({});
   const [registeredScreens, setRegisteredScreens] = useState([]);
 
-  // Selected Dataset & Date
-  const [selectedDatasetId, setSelectedDatasetId] = useState("");
+  // College Sorting States
+  const [sortDept, setSortDept] = useState("Computer Science");
+  const [sortCourse, setSortCourse] = useState("B.Tech");
+  const [sortBranch, setSortBranch] = useState("CSE");
+  const [sortSection, setSortSection] = useState("A");
+  const [sortGroup, setSortGroup] = useState("ALL"); // "ALL" | "G1" | "G2"
+  const [selectedSubject, setSelectedSubject] = useState("Data Structures");
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   // Live Class Screening Controller State
   const [selectedScreenId, setSelectedScreenId] = useState("SCREEN_01");
-  const [selectedSubject, setSelectedSubject] = useState("");
   const [isActivatingSession, setIsActivatingSession] = useState(false);
 
   // Calendar Modal State
@@ -104,12 +107,10 @@ export default function StaffPanelPage() {
   useEffect(() => {
     if (!currentStaffId) return;
     const unsubStudents = subscribeToStudents(setStudents);
-    const unsubDatasets = subscribeToDatasets(setDatasets);
     const unsubLogs = subscribeToAttendanceLogs(setAttendanceLogs);
     const unsubSessions = subscribeToAllScreeningSessions(setActiveScreeningSessions);
     const unsubScreens = subscribeToScreens(setRegisteredScreens);
 
-    // Live subscription to Staffs collection so Admin dataset assignment updates appear instantly
     const unsubStaffs = subscribeToStaffs((staffsList) => {
       const updatedStaff = staffsList.find((s) => (s.staffId || s.id) === currentStaffId);
       if (updatedStaff) {
@@ -120,7 +121,6 @@ export default function StaffPanelPage() {
 
     return () => {
       unsubStudents();
-      unsubDatasets();
       unsubLogs();
       unsubSessions();
       unsubScreens();
@@ -136,66 +136,58 @@ export default function StaffPanelPage() {
     return ["SCREEN_01", "SCREEN_02", "SCREEN_03"];
   }, [registeredScreens]);
 
-  // Assigned datasets for logged-in staff (or all datasets if none explicitly filtered)
-  const assignedDatasets = useMemo(() => {
-    if (!currentStaff) return datasets;
-    const assignedIds = currentStaff.assignedDatasets || [];
-    if (assignedIds.length === 0) return datasets; // Fallback to allow faculty to select any dataset
-    return datasets.filter((d) => assignedIds.includes(d.id));
-  }, [datasets, currentStaff]);
+  // Staff's Configured Allotments
+  const staffAllotments = useMemo(() => {
+    return Array.isArray(currentStaff?.allotments) ? currentStaff.allotments : [];
+  }, [currentStaff]);
 
-  // Auto-select first dataset
-  useEffect(() => {
-    if (assignedDatasets.length > 0 && (!selectedDatasetId || !assignedDatasets.some(d => d.id === selectedDatasetId))) {
-      setSelectedDatasetId(assignedDatasets[0].id);
-    }
-  }, [assignedDatasets, selectedDatasetId]);
-
-  // Current Active Dataset object
-  const activeDataset = useMemo(() => {
-    return assignedDatasets.find((d) => d.id === selectedDatasetId) || assignedDatasets[0] || datasets[0] || null;
-  }, [assignedDatasets, selectedDatasetId, datasets]);
-
-  // Available Subjects for staff (from staff subjects or active dataset subject)
+  // Available Subjects for staff
   const staffSubjectOptions = useMemo(() => {
     const set = new Set();
-    if (activeDataset?.subject) set.add(activeDataset.subject);
     if (Array.isArray(currentStaff?.subjects)) {
       currentStaff.subjects.forEach(s => {
         if (s && s.trim()) set.add(s.trim());
       });
     }
+    if (staffAllotments.length > 0) {
+      staffAllotments.forEach(a => {
+        if (a.subject && a.subject.trim()) set.add(a.subject.trim());
+      });
+    }
     if (set.size === 0) {
-      set.add("Data Structures & Algorithms");
-      set.add("Database Management Systems");
+      set.add("Data Structures");
       set.add("Operating Systems");
-      set.add("Computer Networks");
+      set.add("Database Systems");
     }
     return Array.from(set);
-  }, [activeDataset, currentStaff]);
+  }, [currentStaff, staffAllotments]);
 
-  // Set default subject if not set
+  // Auto-apply staff's first allotment on login if available
   useEffect(() => {
-    if (staffSubjectOptions.length > 0 && (!selectedSubject || !staffSubjectOptions.includes(selectedSubject))) {
-      setSelectedSubject(staffSubjectOptions[0]);
+    if (staffAllotments.length > 0) {
+      const first = staffAllotments[0];
+      if (first.subject) setSelectedSubject(first.subject);
+      if (first.department) setSortDept(first.department);
+      if (first.course) setSortCourse(first.course);
+      if (first.branch) setSortBranch(first.branch);
+      if (first.section) setSortSection(first.section);
+      if (first.group) setSortGroup(first.group);
+    } else if (currentStaff?.department) {
+      setSortDept(currentStaff.department);
     }
-  }, [staffSubjectOptions, selectedSubject]);
+  }, [currentStaff, staffAllotments]);
 
-  // Students belonging to activeDataset
+  // Students matching selected College Sort Filters
   const datasetStudents = useMemo(() => {
-    if (!activeDataset) return students;
     return students.filter((student) => {
-      if (activeDataset.studentIds && activeDataset.studentIds.length > 0) {
-        return activeDataset.studentIds.includes(student.studentId || student.id);
-      }
-      const matchDept = activeDataset.department ? (student.department || "Computer Science") === activeDataset.department : true;
-      const matchCourse = activeDataset.course ? (student.course || student.class || "B.Tech") === activeDataset.course : true;
-      const matchBranch = activeDataset.branch ? (student.branch || "CSE") === activeDataset.branch : true;
-      const matchSec = activeDataset.section ? (student.section || "A") === activeDataset.section : true;
-      const matchGrp = activeDataset.group ? (student.group || "G1") === activeDataset.group : true;
+      const matchDept = sortDept === "ALL" || (student.department || "Computer Science") === sortDept;
+      const matchCourse = sortCourse === "ALL" || (student.course || student.class || "B.Tech") === sortCourse;
+      const matchBranch = sortBranch === "ALL" || (student.branch || "CSE") === sortBranch;
+      const matchSec = sortSection === "ALL" || (student.section || "A") === sortSection;
+      const matchGrp = sortGroup === "ALL" || (student.group || "G1") === sortGroup;
       return matchDept && matchCourse && matchBranch && matchSec && matchGrp;
     });
-  }, [students, activeDataset]);
+  }, [students, sortDept, sortCourse, sortBranch, sortSection, sortGroup]);
 
   // Live active screening session status for selectedScreenId
   const liveSessionForScreen = activeScreeningSessions[selectedScreenId];
@@ -203,29 +195,20 @@ export default function StaffPanelPage() {
 
   // Screening Session Control Handlers
   const handleStartScreening = async () => {
-    if (!activeDataset) {
-      alert("Please select a dataset roster first.");
-      return;
-    }
-
     setIsActivatingSession(true);
     try {
-      const studentIds = activeDataset.studentIds && activeDataset.studentIds.length > 0
-        ? activeDataset.studentIds
-        : datasetStudents.map(s => s.studentId || s.id);
+      const studentIds = datasetStudents.map(s => s.studentId || s.id);
 
       await startScreeningSession({
         screenId: selectedScreenId,
         staffId: currentStaff.staffId || currentStaff.id,
         staffName: currentStaff.name,
-        subject: selectedSubject || activeDataset.subject || "General Subject",
-        datasetId: activeDataset.id,
-        datasetName: activeDataset.name,
-        department: activeDataset.department || currentStaff.department || "Computer Science",
-        course: activeDataset.course || "B.Tech",
-        branch: activeDataset.branch || "CSE",
-        section: activeDataset.section || "A",
-        group: activeDataset.group || "G1",
+        subject: selectedSubject || "General Subject",
+        department: sortDept,
+        course: sortCourse,
+        branch: sortBranch,
+        section: sortSection,
+        group: sortGroup,
         studentIds
       });
 
@@ -777,13 +760,13 @@ export default function StaffPanelPage() {
                   </select>
                 </div>
 
-                {/* 3. Selected Dataset Roster Info */}
+                {/* 3. Selected College Class Info */}
                 <div className="space-y-1.5 bg-white/5 p-3.5 rounded-2xl border border-white/10 backdrop-blur-md">
                   <label className="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <GraduationCap className="w-3.5 h-3.5 text-indigo-400" /> Active Roster ({datasetStudents.length})
+                    <GraduationCap className="w-3.5 h-3.5 text-indigo-400" /> Loaded Class Roster
                   </label>
-                  <div className="px-3 py-1.5 bg-slate-900/80 border border-slate-700 rounded-xl text-xs font-semibold text-white truncate">
-                    {activeDataset ? activeDataset.name : "Select Dataset Below"}
+                  <div className="px-3 py-1.5 bg-slate-900/80 border border-slate-700 rounded-xl text-xs font-bold text-emerald-400 truncate">
+                    {datasetStudents.length} Students Matched
                   </div>
                 </div>
               </div>
@@ -804,34 +787,109 @@ export default function StaffPanelPage() {
               )}
             </div>
 
-            {/* Datasets Selector Tabs */}
-            <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3 shadow-xs">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-indigo-600" /> Select Dataset
-                </h2>
-                <span className="text-xs text-slate-400 font-mono">
-                  Active: {activeDataset ? activeDataset.name : "None"}
-                </span>
-              </div>
+            {/* TEACHING ALLOTMENTS & SORT SEARCH FILTER BAR */}
+            <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-4 shadow-xs">
+              {/* Teaching Allotments Quick Pills */}
+              {staffAllotments.length > 0 && (
+                <div className="space-y-2 pb-3 border-b border-slate-100">
+                  <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-indigo-600" /> Your Assigned Teaching Allotments (Quick Select)
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {staffAllotments.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => {
+                          if (a.subject) setSelectedSubject(a.subject);
+                          if (a.department) setSortDept(a.department);
+                          if (a.course) setSortCourse(a.course);
+                          if (a.branch) setSortBranch(a.branch);
+                          if (a.section) setSortSection(a.section);
+                          if (a.group) setSortGroup(a.group);
+                          showToast(`Loaded ${a.subject} (${a.branch}-${a.section})!`);
+                        }}
+                        className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold rounded-xl border border-indigo-200 flex items-center gap-2 transition-all shadow-2xs"
+                      >
+                        <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>{a.subject}</span>
+                        <span className="text-[10px] font-mono text-indigo-600 bg-indigo-200/60 px-1.5 py-0.5 rounded">
+                          {a.branch}-{a.section} ({a.group || "ALL"})
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {assignedDatasets.map((ds) => {
-                  const isSelected = ds.id === selectedDatasetId;
-                  return (
-                    <button
-                      key={ds.id}
-                      onClick={() => setSelectedDatasetId(ds.id)}
-                      className={`px-4 py-2.5 rounded-xl text-left transition-all border shrink-0 min-w-[140px] sm:min-w-[180px] ${
-                        isSelected
-                          ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200"
-                          : "bg-slate-50 text-slate-800 hover:bg-slate-100 border-slate-200"
-                      }`}
+              {/* College Sort Controls Grid */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-indigo-600" /> College Student Hierarchy Sort &amp; Search
+                  </h2>
+                  <span className="text-xs text-indigo-600 font-bold font-mono">
+                    {datasetStudents.length} Students Matched
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Department</label>
+                    <input
+                      type="text"
+                      value={sortDept}
+                      onChange={(e) => setSortDept(e.target.value)}
+                      placeholder="Computer Science"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Course</label>
+                    <input
+                      type="text"
+                      value={sortCourse}
+                      onChange={(e) => setSortCourse(e.target.value)}
+                      placeholder="B.Tech"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Branch</label>
+                    <input
+                      type="text"
+                      value={sortBranch}
+                      onChange={(e) => setSortBranch(e.target.value)}
+                      placeholder="CSE"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Section</label>
+                    <input
+                      type="text"
+                      value={sortSection}
+                      onChange={(e) => setSortSection(e.target.value)}
+                      placeholder="A"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Group Option</label>
+                    <select
+                      value={sortGroup}
+                      onChange={(e) => setSortGroup(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
                     >
-                      <div className="font-bold text-xs sm:text-sm truncate">{ds.name}</div>
-                    </button>
-                  );
-                })}
+                      <option value="ALL">ALL Groups (G1 + G2)</option>
+                      <option value="G1">Group G1 Only</option>
+                      <option value="G2">Group G2 Only</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
 

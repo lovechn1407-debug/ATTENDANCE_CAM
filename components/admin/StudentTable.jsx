@@ -190,6 +190,7 @@ export default function StudentTable({
                 <th className="py-3.5 px-4">Student ID</th>
                 <th className="py-3.5 px-4">Department &amp; Course</th>
                 <th className="py-3.5 px-4">Branch / Sec / Group</th>
+                <th className="py-3.5 px-4">Enrolled Subjects</th>
                 <th className="py-3.5 px-4">Biometric Descriptor</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
@@ -197,7 +198,7 @@ export default function StudentTable({
             <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     <AlertCircle className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                     <p className="font-medium text-slate-600">No students found matching filters.</p>
                     <p className="text-xs text-slate-400 mt-1">Try resetting search filters or click "Add Student".</p>
@@ -211,6 +212,7 @@ export default function StudentTable({
                         ? student.descriptor.length === 128
                         : Object.keys(student.descriptor).length === 128)
                   );
+                  const subjectsList = Array.isArray(student.subjects) ? student.subjects : (student.subjects ? [student.subjects] : []);
 
                   return (
                     <tr key={student.id} className="hover:bg-slate-50/60 transition-colors">
@@ -255,6 +257,21 @@ export default function StudentTable({
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                             Grp {student.group || "G1"}
                           </span>
+                        </div>
+                      </td>
+
+                      {/* Enrolled Subjects */}
+                      <td className="py-3 px-4 max-w-[200px]">
+                        <div className="flex flex-wrap gap-1">
+                          {subjectsList.length > 0 ? (
+                            subjectsList.map((sub, idx) => (
+                              <span key={idx} className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-semibold rounded-md border border-emerald-200 truncate">
+                                {sub}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">General</span>
+                          )}
                         </div>
                       </td>
 

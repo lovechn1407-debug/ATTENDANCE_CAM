@@ -26,7 +26,7 @@ import {
 import { subscribeToStaffs, saveStaff, deleteStaff, bulkAddStaffs } from "@/lib/firebase";
 import { parseStaffsCSV } from "@/lib/csvParser";
 
-export default function StaffManager({ datasets = [] }) {
+export default function StaffManager({ students = [] }) {
   const [staffs, setStaffs] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -46,8 +46,16 @@ export default function StaffManager({ datasets = [] }) {
   const [password, setPassword] = useState("");
   const [department, setDepartment] = useState("Computer Science");
   const [subjectsInput, setSubjectsInput] = useState("");
-  const [selectedDatasetIds, setSelectedDatasetIds] = useState([]);
+  const [allotments, setAllotments] = useState([]);
   const [visiblePasswords, setVisiblePasswords] = useState({});
+
+  // Temporary allotment builder inputs
+  const [newAllotSubject, setNewAllotSubject] = useState("");
+  const [newAllotDept, setNewAllotDept] = useState("Computer Science");
+  const [newAllotCourse, setNewAllotCourse] = useState("B.Tech");
+  const [newAllotBranch, setNewAllotBranch] = useState("CSE");
+  const [newAllotSec, setNewAllotSec] = useState("A");
+  const [newAllotGroup, setNewAllotGroup] = useState("ALL"); // "ALL" | "G1" | "G2"
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -64,8 +72,14 @@ export default function StaffManager({ datasets = [] }) {
     setStaffName("");
     setPassword("");
     setDepartment("Computer Science");
-    setSubjectsInput("");
-    setSelectedDatasetIds([]);
+    setSubjectsInput("Data Structures, Operating Systems");
+    setAllotments([]);
+    setNewAllotSubject("Data Structures");
+    setNewAllotDept("Computer Science");
+    setNewAllotCourse("B.Tech");
+    setNewAllotBranch("CSE");
+    setNewAllotSec("A");
+    setNewAllotGroup("ALL");
     setErrorMsg("");
     setIsModalOpen(true);
   };
@@ -77,25 +91,42 @@ export default function StaffManager({ datasets = [] }) {
     setPassword(staff.password || "");
     setDepartment(staff.department || "Computer Science");
     setSubjectsInput(Array.isArray(staff.subjects) ? staff.subjects.join(", ") : "");
-    setSelectedDatasetIds(staff.assignedDatasets || []);
+    setAllotments(Array.isArray(staff.allotments) ? staff.allotments : []);
+    setNewAllotSubject(Array.isArray(staff.subjects) && staff.subjects[0] ? staff.subjects[0] : "Data Structures");
+    setNewAllotDept(staff.department || "Computer Science");
+    setNewAllotCourse("B.Tech");
+    setNewAllotBranch("CSE");
+    setNewAllotSec("A");
+    setNewAllotGroup("ALL");
     setErrorMsg("");
     setIsModalOpen(true);
   };
 
-  const handleToggleDatasetSelection = (datasetId) => {
-    setSelectedDatasetIds((prev) =>
-      prev.includes(datasetId)
-        ? prev.filter((id) => id !== datasetId)
-        : [...prev, datasetId]
-    );
+  const handleAddAllotment = () => {
+    if (!newAllotSubject.trim()) {
+      alert("Please enter a subject name for the allotment.");
+      return;
+    }
+    const newAllotment = {
+      id: `ALLOT_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+      subject: newAllotSubject.trim(),
+      department: newAllotDept.trim(),
+      course: newAllotCourse.trim(),
+      branch: newAllotBranch.trim(),
+      section: newAllotSec.trim().toUpperCase(),
+      group: newAllotGroup
+    };
+    setAllotments(prev => [...prev, newAllotment]);
+
+    // Automatically ensure subject is in subjectsInput
+    const subs = subjectsInput.split(",").map(s => s.trim()).filter(Boolean);
+    if (!subs.includes(newAllotSubject.trim())) {
+      setSubjectsInput(prev => prev ? `${prev}, ${newAllotSubject.trim()}` : newAllotSubject.trim());
+    }
   };
 
-  const handleSelectAllDatasets = () => {
-    if (selectedDatasetIds.length === datasets.length) {
-      setSelectedDatasetIds([]);
-    } else {
-      setSelectedDatasetIds(datasets.map((d) => d.id));
-    }
+  const handleRemoveAllotment = (allotId) => {
+    setAllotments(prev => prev.filter(a => a.id !== allotId));
   };
 
   const handleSave = async (e) => {
@@ -119,6 +150,7 @@ export default function StaffManager({ datasets = [] }) {
     try {
       const subjectsList = subjectsInput
         .split(",")
+        .flatMap(s => s.split(";"))
         .map((s) => s.trim())
         .filter(Boolean);
 
@@ -128,7 +160,7 @@ export default function StaffManager({ datasets = [] }) {
         password: password.trim(),
         department: department.trim(),
         subjects: subjectsList,
-        assignedDatasets: selectedDatasetIds
+        allotments: allotments
       });
       setIsModalOpen(false);
     } catch (err) {
@@ -222,10 +254,10 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-indigo-600" /> College Faculty Accounts &amp; Subject Category
+            <UserCheck className="w-5 h-5 text-indigo-600" /> College Faculty Accounts &amp; Student Group Allotments
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Manage teacher credentials, assigned subjects, and screening permissions.
+            Manage faculty credentials, subjects taught, and student group teaching allotments.
           </p>
         </div>
 
@@ -248,7 +280,7 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
             className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl shadow-sm shadow-indigo-200 flex items-center gap-2 transition-all shrink-0"
           >
             <UserPlus className="w-4 h-4" />
-            <span>Add New Staff</span>
+            <span>Add New Faculty</span>
           </button>
         </div>
       </div>
@@ -276,15 +308,15 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
           <UserCheck className="w-12 h-12 text-slate-300 mx-auto" />
           <h3 className="text-base font-bold text-slate-800">No Staff Accounts Found</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Click "Add New Staff" or "Import Staff CSV" above to create credentials and subject assignments.
+            Click "Add New Faculty" or "Import Staff CSV" above to create credentials and teaching allotments.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredStaffs.map((staff) => {
             const sId = staff.staffId || staff.id;
-            const assignedIds = staff.assignedDatasets || [];
             const subjectsList = Array.isArray(staff.subjects) ? staff.subjects : [];
+            const staffAllotments = Array.isArray(staff.allotments) ? staff.allotments : [];
             const isPasswordVisible = !!visiblePasswords[sId];
 
             return (
@@ -313,7 +345,7 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
                       <button
                         onClick={() => handleOpenEditModal(staff)}
                         className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                        title="Edit Staff Account"
+                        title="Edit Staff Account & Allotments"
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
@@ -327,23 +359,30 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
                     </div>
                   </div>
 
-                  {/* Assigned Subjects Category Badges */}
+                  {/* Teaching Allotments Badges */}
                   <div className="mt-3 space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                      <BookOpen className="w-3 h-3 text-indigo-600" />
-                      <span>Subjects Taught ({subjectsList.length})</span>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <BookOpen className="w-3 h-3 text-indigo-600" /> Teaching Allotments ({staffAllotments.length})
+                      </span>
                     </div>
-                    {subjectsList.length === 0 ? (
-                      <span className="text-[11px] text-slate-400 italic">No subjects added</span>
+
+                    {staffAllotments.length === 0 ? (
+                      <span className="text-[11px] text-slate-400 italic">No specific group allotments added yet</span>
                     ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {subjectsList.map((sub, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[11px] font-bold rounded-md border border-indigo-150"
+                      <div className="space-y-1">
+                        {staffAllotments.map((a, idx) => (
+                          <div
+                            key={a.id || idx}
+                            className="p-1.5 bg-white rounded-lg border border-slate-200 text-[11px] flex items-center justify-between"
                           >
-                            {sub}
-                          </span>
+                            <div className="font-bold text-indigo-950 truncate max-w-[170px]">
+                              {a.subject}
+                            </div>
+                            <div className="text-[10px] font-mono text-slate-500">
+                              {a.branch}-{a.section} ({a.group || "ALL"})
+                            </div>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -381,10 +420,10 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
         </div>
       )}
 
-      {/* CREATE / EDIT STAFF MODAL */}
+      {/* CREATE / EDIT STAFF MODAL WITH ALLOTMENT BUILDER */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 border border-slate-200">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 border border-slate-200 my-8">
             {/* Modal Title */}
             <div className="flex items-center justify-between border-b border-slate-150 pb-4">
               <div className="flex items-center gap-3">
@@ -393,10 +432,10 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 leading-tight">
-                    {editingStaff ? "Edit Faculty Member" : "Create New Faculty Account"}
+                    {editingStaff ? "Edit Faculty Member & Allotments" : "Create New Faculty Account"}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Assign Staff ID, password, department &amp; subject category
+                    Set login credentials and configure student group teaching allotments
                   </p>
                 </div>
               </div>
@@ -416,56 +455,73 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
             )}
 
             <form onSubmit={handleSave} className="space-y-4">
-              {/* Staff ID */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Staff ID / Username *
-                </label>
-                <input
-                  type="text"
-                  required
-                  disabled={!!editingStaff}
-                  placeholder="e.g. STAFF01"
-                  value={staffId}
-                  onChange={(e) => setStaffId(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-indigo-500 disabled:opacity-60"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Staff ID */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Staff ID / Username *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    disabled={!!editingStaff}
+                    placeholder="e.g. STAFF01"
+                    value={staffId}
+                    onChange={(e) => setStaffId(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+                  />
+                </div>
+
+                {/* Staff Name */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Faculty Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Prof. Alan Turing"
+                    value={staffName}
+                    onChange={(e) => setStaffName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                {/* Department */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Department *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Computer Science"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Login Password *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. staff123"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
               </div>
 
-              {/* Staff Name */}
+              {/* Assigned Subjects Category Input */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Faculty Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Prof. Alan Turing"
-                  value={staffName}
-                  onChange={(e) => setStaffName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              {/* Department */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Department *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Computer Science"
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              {/* Subjects Category Input */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Assigned Subjects (Comma-Separated) *
+                  Subjects Taught (Comma-Separated) *
                 </label>
                 <input
                   type="text"
@@ -475,24 +531,123 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
                   onChange={(e) => setSubjectsInput(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:border-indigo-500"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  These subjects will automatically appear in the Staff Panel dropdown when taking class screening.
-                </p>
               </div>
 
-              {/* Password */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Login Password *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. staff123"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
-                />
+              {/* ─── TEACHING ALLOTMENT BUILDER SECTION ─── */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                  <span>Add Student Group Teaching Allotment</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Specify target student criteria</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500">Subject</label>
+                    <input
+                      type="text"
+                      placeholder="Data Structures"
+                      value={newAllotSubject}
+                      onChange={(e) => setNewAllotSubject(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500">Department</label>
+                    <input
+                      type="text"
+                      placeholder="Computer Science"
+                      value={newAllotDept}
+                      onChange={(e) => setNewAllotDept(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500">Course</label>
+                    <input
+                      type="text"
+                      placeholder="B.Tech"
+                      value={newAllotCourse}
+                      onChange={(e) => setNewAllotCourse(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500">Branch</label>
+                    <input
+                      type="text"
+                      placeholder="CSE"
+                      value={newAllotBranch}
+                      onChange={(e) => setNewAllotBranch(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500">Section</label>
+                    <input
+                      type="text"
+                      placeholder="A"
+                      value={newAllotSec}
+                      onChange={(e) => setNewAllotSec(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500">Group Allotment</label>
+                    <select
+                      value={newAllotGroup}
+                      onChange={(e) => setNewAllotGroup(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-indigo-700"
+                    >
+                      <option value="ALL">ALL Groups (G1 + G2)</option>
+                      <option value="G1">Group G1 Only</option>
+                      <option value="G2">Group G2 Only</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddAllotment}
+                  className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> Add Allotment Rule
+                </button>
+
+                {/* Configured Allotments List */}
+                {allotments.length > 0 && (
+                  <div className="space-y-1.5 pt-2 border-t border-slate-200">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Current Allotments ({allotments.length}):
+                    </div>
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {allotments.map((a) => (
+                        <div
+                          key={a.id}
+                          className="p-2 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <span className="font-bold text-indigo-950">{a.subject}</span>
+                            <span className="text-slate-500 ml-2 font-mono text-[11px]">
+                              {a.course} {a.branch}-{a.section} ({a.group || "ALL"})
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAllotment(a.id)}
+                            className="p-1 text-slate-400 hover:text-red-600"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -509,7 +664,7 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
                   disabled={isSubmitting}
                   className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-200 disabled:opacity-50"
                 >
-                  {isSubmitting ? "Saving..." : editingStaff ? "Update Staff" : "Create Staff Account"}
+                  {isSubmitting ? "Saving..." : editingStaff ? "Update Faculty & Allotments" : "Create Faculty Account"}
                 </button>
               </div>
             </form>
