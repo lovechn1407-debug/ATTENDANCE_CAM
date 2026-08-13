@@ -72,16 +72,16 @@ export default function BulkUploadModal({ isOpen, onClose }) {
   };
 
   const downloadSampleCSV = () => {
-    const sampleCSV = `studentId,name,class,section,group,photoUrl
-STU_1001,John Doe,10,A,A,https://i.ibb.co/sample1.jpg
-STU_1002,Jane Smith,10,A,B,https://i.ibb.co/sample2.jpg
-STU_1003,Robert Brown,11,B,A,https://i.ibb.co/sample3.jpg`;
+    const sampleCSV = `studentId,name,department,course,branch,section,group,photoUrl
+STU_1001,John Doe,Computer Science,B.Tech,CSE,A,G1,https://i.ibb.co/sample1.jpg
+STU_1002,Jane Smith,Computer Science,B.Tech,CSE,A,G2,https://i.ibb.co/sample2.jpg
+STU_1003,Robert Brown,Electronics,M.Tech,ECE,B,G1,https://i.ibb.co/sample3.jpg`;
 
     const blob = new Blob([sampleCSV], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "student_master_template.csv";
+    a.download = "college_student_master_template.csv";
     a.click();
   };
 
@@ -129,8 +129,8 @@ STU_1003,Robert Brown,11,B,A,https://i.ibb.co/sample3.jpg`;
                 CSV
               </div>
               <div>
-                <div className="text-xs font-semibold text-slate-800">Need the standard CSV layout?</div>
-                <div className="text-[11px] text-slate-500">Download sample template with pre-formatted headers.</div>
+                <div className="text-xs font-semibold text-slate-800">Need the college CSV layout?</div>
+                <div className="text-[11px] text-slate-500">Download sample template with Dept, Course, Branch, Sec, Group headers.</div>
               </div>
             </div>
             <button
@@ -178,9 +178,9 @@ STU_1003,Robert Brown,11,B,A,https://i.ibb.co/sample3.jpg`;
                     <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
                       <th className="p-2.5">ID</th>
                       <th className="p-2.5">Name</th>
-                      <th className="p-2.5">Class</th>
-                      <th className="p-2.5">Sec</th>
-                      <th className="p-2.5">Group</th>
+                      <th className="p-2.5">Dept</th>
+                      <th className="p-2.5">Course / Branch</th>
+                      <th className="p-2.5">Sec &amp; Group</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -188,9 +188,9 @@ STU_1003,Robert Brown,11,B,A,https://i.ibb.co/sample3.jpg`;
                       <tr key={idx}>
                         <td className="p-2.5 font-mono text-[11px] font-semibold">{s.studentId}</td>
                         <td className="p-2.5 font-medium text-slate-900">{s.name}</td>
-                        <td className="p-2.5">{s.class}</td>
-                        <td className="p-2.5">{s.section}</td>
-                        <td className="p-2.5 font-semibold text-indigo-600">Group {s.group}</td>
+                        <td className="p-2.5">{s.department || "CS"}</td>
+                        <td className="p-2.5">{s.course || s.class} ({s.branch || "CSE"})</td>
+                        <td className="p-2.5 font-semibold text-indigo-600">Sec {s.section} ({s.group})</td>
                       </tr>
                     ))}
                   </tbody>

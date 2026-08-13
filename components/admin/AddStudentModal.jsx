@@ -27,9 +27,11 @@ const POSES = [
 export default function AddStudentModal({ isOpen, onClose, onStartRegistration, studentToEdit = null }) {
   const [studentId, setStudentId] = useState("");
   const [name, setName] = useState("");
-  const [studentClass, setStudentClass] = useState("10");
+  const [department, setDepartment] = useState("Computer Science");
+  const [course, setCourse] = useState("B.Tech");
+  const [branch, setBranch] = useState("CSE");
   const [section, setSection] = useState("A");
-  const [group, setGroup] = useState("A");
+  const [group, setGroup] = useState("G1");
 
   // Multi-Side Pose Photos State { center: null, left: null, right: null }
   const [capturedPoses, setCapturedPoses] = useState({ center: null, left: null, right: null });
@@ -57,9 +59,11 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
       if (studentToEdit) {
         setStudentId(studentToEdit.studentId || studentToEdit.id);
         setName(studentToEdit.name || "");
-        setStudentClass(studentToEdit.class || "10");
+        setDepartment(studentToEdit.department || "Computer Science");
+        setCourse(studentToEdit.course || studentToEdit.class || "B.Tech");
+        setBranch(studentToEdit.branch || "CSE");
         setSection(studentToEdit.section || "A");
-        setGroup(studentToEdit.group || "A");
+        setGroup(studentToEdit.group || "G1");
         const existingPhoto = studentToEdit.photoUrl || null;
         setCapturedPoses({
           center: existingPhoto,
@@ -69,9 +73,11 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
       } else {
         setStudentId(`STU_${Math.floor(100000 + Math.random() * 900000)}`);
         setName("");
-        setStudentClass("10");
+        setDepartment("Computer Science");
+        setCourse("B.Tech");
+        setBranch("CSE");
         setSection("A");
-        setGroup("A");
+        setGroup("G1");
         setCapturedPoses({ center: null, left: null, right: null });
       }
       setCurrentPoseIndex(0);
@@ -171,7 +177,10 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
     const payload = {
       studentId: studentId.trim(),
       name: name.trim(),
-      studentClass: studentClass.trim(),
+      department: department.trim(),
+      course: course.trim(),
+      branch: branch.trim(),
+      studentClass: course.trim(),
       section: section.trim(),
       group: group.trim(),
       photos: [
@@ -228,10 +237,10 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
             </div>
           )}
 
-          {/* Student Fields */}
+          {/* Student Fields Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
                 <Hash className="w-3.5 h-3.5 text-slate-400" /> Student ID
               </label>
               <input
@@ -245,7 +254,7 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
                 <User className="w-3.5 h-3.5 text-slate-400" /> Full Name
               </label>
               <input
@@ -259,16 +268,44 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
-                <School className="w-3.5 h-3.5 text-slate-400" /> Class &amp; Section
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                <School className="w-3.5 h-3.5 text-slate-400" /> Department Name
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Computer Science"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                <School className="w-3.5 h-3.5 text-slate-400" /> Course Name
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. B.Tech"
+                value={course}
+                onChange={(e) => setCourse(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                <School className="w-3.5 h-3.5 text-slate-400" /> Branch &amp; Section
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   required
-                  placeholder="Class (10)"
-                  value={studentClass}
-                  onChange={(e) => setStudentClass(e.target.value)}
+                  placeholder="Branch (CSE)"
+                  value={branch}
+                  onChange={(e) => setBranch(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
                 <input
@@ -283,19 +320,20 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
-                <GroupIcon className="w-3.5 h-3.5 text-slate-400" /> Group Selector
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                <GroupIcon className="w-3.5 h-3.5 text-slate-400" /> Group
               </label>
-              <select
+              <input
+                type="text"
+                required
+                placeholder="Group (G1, G2)"
                 value={group}
                 onChange={(e) => setGroup(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
-              >
-                <option value="A">Group A</option>
-                <option value="B">Group B</option>
-              </select>
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              />
             </div>
           </div>
+
 
           {/* Photo & Multi-Angle Pose Section */}
           <div className="space-y-3 pt-2">

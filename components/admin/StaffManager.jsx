@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   UserCheck, 
   UserPlus, 
@@ -16,9 +16,15 @@ import {
   ShieldAlert,
   X,
   Sparkles,
-  CheckCircle2
+  BookOpen,
+  FileSpreadsheet,
+  Upload,
+  Download,
+  CheckCircle2,
+  Building2
 } from "lucide-react";
-import { subscribeToStaffs, saveStaff, deleteStaff } from "@/lib/firebase";
+import { subscribeToStaffs, saveStaff, deleteStaff, bulkAddStaffs } from "@/lib/firebase";
+import { parseStaffsCSV } from "@/lib/csvParser";
 
 export default function StaffManager({ datasets = [] }) {
   const [staffs, setStaffs] = useState([]);
@@ -26,10 +32,20 @@ export default function StaffManager({ datasets = [] }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
 
+  // Bulk CSV modal state
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [parsedStaffs, setParsedStaffs] = useState([]);
+  const [bulkFileName, setBulkFileName] = useState("");
+  const [isUploadingBulk, setIsUploadingBulk] = useState(false);
+  const [bulkError, setBulkError] = useState("");
+  const staffFileInputRef = useRef(null);
+
   // Form states
   const [staffId, setStaffId] = useState("");
   const [staffName, setStaffName] = useState("");
   const [password, setPassword] = useState("");
+  const [department, setDepartment] = useState("Computer Science");
+  const [subjectsInput, setSubjectsInput] = useState("");
   const [selectedDatasetIds, setSelectedDatasetIds] = useState([]);
   const [visiblePasswords, setVisiblePasswords] = useState({});
 
@@ -47,6 +63,8 @@ export default function StaffManager({ datasets = [] }) {
     setStaffId("");
     setStaffName("");
     setPassword("");
+    setDepartment("Computer Science");
+    setSubjectsInput("");
     setSelectedDatasetIds([]);
     setErrorMsg("");
     setIsModalOpen(true);
@@ -57,6 +75,8 @@ export default function StaffManager({ datasets = [] }) {
     setStaffId(staff.staffId || staff.id);
     setStaffName(staff.name || "");
     setPassword(staff.password || "");
+    setDepartment(staff.department || "Computer Science");
+    setSubjectsInput(Array.isArray(staff.subjects) ? staff.subjects.join(", ") : "");
     setSelectedDatasetIds(staff.assignedDatasets || []);
     setErrorMsg("");
     setIsModalOpen(true);
@@ -97,10 +117,17 @@ export default function StaffManager({ datasets = [] }) {
     setErrorMsg("");
 
     try {
+      const subjectsList = subjectsInput
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
       await saveStaff({
         staffId: staffId.trim().toUpperCase(),
         name: staffName.trim(),
         password: password.trim(),
+        department: department.trim(),
+        subjects: subjectsList,
         assignedDatasets: selectedDatasetIds
       });
       setIsModalOpen(false);
@@ -129,10 +156,64 @@ export default function StaffManager({ datasets = [] }) {
     }));
   };
 
+  // Bulk CSV Staff Handlers
+  const handleStaffFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setBulkFileName(file.name);
+    setBulkError("");
+
+    try {
+      const data = await parseStaffsCSV(file);
+      if (data.length === 0) {
+        setBulkError("CSV file appears to be empty or missing headers.");
+        setParsedStaffs([]);
+      } else {
+        setParsedStaffs(data);
+      }
+    } catch (err) {
+      setBulkError("Error parsing staff CSV: " + err.message);
+      setParsedStaffs([]);
+    }
+  };
+
+  const handleBulkStaffSubmit = async () => {
+    if (parsedStaffs.length === 0) return;
+    setIsUploadingBulk(true);
+    setBulkError("");
+
+    try {
+      await bulkAddStaffs(parsedStaffs);
+      setIsBulkModalOpen(false);
+      setParsedStaffs([]);
+      setBulkFileName("");
+    } catch (err) {
+      setBulkError("Failed to upload staff to Firebase: " + err.message);
+    } finally {
+      setIsUploadingBulk(false);
+    }
+  };
+
+  const downloadSampleStaffCSV = () => {
+    const sampleCSV = `staffId,name,password,department,subjects
+STAFF01,Prof. Alan Turing,pass123,Computer Science,Data Structures; Algorithms; Python
+STAFF02,Dr. Grace Hopper,pass456,Computer Science,Compiler Design; Operating Systems
+STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
+
+    const blob = new Blob([sampleCSV], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "staff_import_template.csv";
+    a.click();
+  };
+
   const filteredStaffs = staffs.filter(
     (s) =>
       (s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (s.staffId && s.staffId.toLowerCase().includes(searchTerm.toLowerCase()))
+      (s.staffId && s.staffId.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (s.department && s.department.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -141,20 +222,35 @@ export default function StaffManager({ datasets = [] }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-indigo-600" /> Staff Accounts &amp; Dataset Access
+            <UserCheck className="w-5 h-5 text-indigo-600" /> College Faculty Accounts &amp; Subject Category
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Create staff credentials and assign single or multiple attendance datasets for manual verification &amp; edits.
+            Manage teacher credentials, assigned subjects, and screening permissions.
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAddModal}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl shadow-sm shadow-indigo-200 flex items-center gap-2 transition-all shrink-0"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Add New Staff</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => {
+              setParsedStaffs([]);
+              setBulkFileName("");
+              setBulkError("");
+              setIsBulkModalOpen(true);
+            }}
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-xl border border-slate-200 flex items-center gap-2 transition-all shrink-0"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>Import Staff CSV</span>
+          </button>
+
+          <button
+            onClick={handleOpenAddModal}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl shadow-sm shadow-indigo-200 flex items-center gap-2 transition-all shrink-0"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Add New Staff</span>
+          </button>
+        </div>
       </div>
 
       {/* Search Filter Bar */}
@@ -163,14 +259,14 @@ export default function StaffManager({ datasets = [] }) {
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search staff by Name or Staff ID..."
+            placeholder="Search staff by Name, Staff ID, or Department..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
           />
         </div>
         <span className="text-xs font-semibold text-slate-500 px-3 py-1.5 bg-slate-100 rounded-xl border border-slate-200">
-          Total Staffs: {staffs.length}
+          Total Faculty: {staffs.length}
         </span>
       </div>
 
@@ -180,7 +276,7 @@ export default function StaffManager({ datasets = [] }) {
           <UserCheck className="w-12 h-12 text-slate-300 mx-auto" />
           <h3 className="text-base font-bold text-slate-800">No Staff Accounts Found</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Click "Add New Staff" above to create credentials and assign datasets to your staff.
+            Click "Add New Staff" or "Import Staff CSV" above to create credentials and subject assignments.
           </p>
         </div>
       ) : (
@@ -188,6 +284,7 @@ export default function StaffManager({ datasets = [] }) {
           {filteredStaffs.map((staff) => {
             const sId = staff.staffId || staff.id;
             const assignedIds = staff.assignedDatasets || [];
+            const subjectsList = Array.isArray(staff.subjects) ? staff.subjects : [];
             const isPasswordVisible = !!visiblePasswords[sId];
 
             return (
@@ -206,6 +303,10 @@ export default function StaffManager({ datasets = [] }) {
                       <h3 className="text-lg font-bold text-slate-900 mt-1 leading-tight">
                         {staff.name}
                       </h3>
+                      <p className="text-xs font-semibold text-slate-500 flex items-center gap-1 mt-0.5">
+                        <Building2 className="w-3 h-3 text-slate-400" />
+                        <span>{staff.department || "Computer Science"}</span>
+                      </p>
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
@@ -224,6 +325,28 @@ export default function StaffManager({ datasets = [] }) {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
+                  </div>
+
+                  {/* Assigned Subjects Category Badges */}
+                  <div className="mt-3 space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                      <BookOpen className="w-3 h-3 text-indigo-600" />
+                      <span>Subjects Taught ({subjectsList.length})</span>
+                    </div>
+                    {subjectsList.length === 0 ? (
+                      <span className="text-[11px] text-slate-400 italic">No subjects added</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {subjectsList.map((sub, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[11px] font-bold rounded-md border border-indigo-150"
+                          >
+                            {sub}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Password row */}
@@ -246,41 +369,11 @@ export default function StaffManager({ datasets = [] }) {
                       )}
                     </button>
                   </div>
-
-                  {/* Assigned Datasets section */}
-                  <div className="mt-4 space-y-2">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <Layers className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>Assigned Datasets ({assignedIds.length})</span>
-                    </div>
-
-                    {assignedIds.length === 0 ? (
-                      <span className="inline-block text-xs text-amber-600 italic bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
-                        No datasets assigned yet
-                      </span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {assignedIds.map((dId) => {
-                          const matchedDs = datasets.find((d) => d.id === dId);
-                          const dsName = matchedDs ? matchedDs.name : dId;
-                          return (
-                            <span
-                              key={dId}
-                              className="px-2.5 py-1 bg-slate-100 text-slate-800 text-xs font-semibold rounded-lg border border-slate-200 truncate max-w-[200px]"
-                              title={dsName}
-                            >
-                              {dsName}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-mono">
                   <span>Created: {new Date(staff.createdAt || Date.now()).toLocaleDateString()}</span>
-                  <span className="text-indigo-600 font-sans font-bold">Authorized</span>
+                  <span className="text-indigo-600 font-sans font-bold">Faculty Authorized</span>
                 </div>
               </div>
             );
@@ -300,10 +393,10 @@ export default function StaffManager({ datasets = [] }) {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 leading-tight">
-                    {editingStaff ? "Edit Staff Account" : "Create New Staff Account"}
+                    {editingStaff ? "Edit Faculty Member" : "Create New Faculty Account"}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Assign Staff ID, password &amp; dataset permissions
+                    Assign Staff ID, password, department &amp; subject category
                   </p>
                 </div>
               </div>
@@ -342,22 +435,55 @@ export default function StaffManager({ datasets = [] }) {
               {/* Staff Name */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Staff Full Name *
+                  Faculty Full Name *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. John Smith"
+                  placeholder="e.g. Prof. Alan Turing"
                   value={staffName}
                   onChange={(e) => setStaffName(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
+              {/* Department */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Department *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Computer Science"
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Subjects Category Input */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Assigned Subjects (Comma-Separated) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Data Structures, Operating Systems, Python"
+                  value={subjectsInput}
+                  onChange={(e) => setSubjectsInput(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:border-indigo-500"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  These subjects will automatically appear in the Staff Panel dropdown when taking class screening.
+                </p>
+              </div>
+
               {/* Password */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Staff Login Password *
+                  Login Password *
                 </label>
                 <input
                   type="text"
@@ -369,57 +495,8 @@ export default function StaffManager({ datasets = [] }) {
                 />
               </div>
 
-              {/* Datasets Checklist (Assign 1 or More Datasets) */}
-              <div className="space-y-2 pt-2 border-t border-slate-150">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Assign Datasets (Select 1 or More)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleSelectAllDatasets}
-                    className="text-xs text-indigo-600 font-bold hover:underline"
-                  >
-                    {selectedDatasetIds.length === datasets.length ? "Deselect All" : "Select All"}
-                  </button>
-                </div>
-
-                {datasets.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">No datasets created in Admin yet.</p>
-                ) : (
-                  <div className="max-h-48 overflow-y-auto space-y-1.5 p-2 bg-slate-50 rounded-xl border border-slate-200">
-                    {datasets.map((d) => {
-                      const isSelected = selectedDatasetIds.includes(d.id);
-                      return (
-                        <div
-                          key={d.id}
-                          onClick={() => handleToggleDatasetSelection(d.id)}
-                          className={`p-2.5 rounded-lg flex items-center justify-between text-xs font-semibold cursor-pointer transition-all ${
-                            isSelected
-                              ? "bg-indigo-50 text-indigo-900 border border-indigo-200 shadow-2xs"
-                              : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-150"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            {isSelected ? (
-                              <CheckSquare className="w-4 h-4 text-indigo-600 shrink-0" />
-                            ) : (
-                              <Square className="w-4 h-4 text-slate-300 shrink-0" />
-                            )}
-                            <span className="truncate">{d.name}</span>
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {d.classes?.length ? `${d.classes.length} classes` : "Custom"}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
               {/* Action Buttons */}
-              <div className="flex items-center gap-3 pt-3">
+              <div className="flex items-center gap-3 pt-3 border-t border-slate-150">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -439,6 +516,126 @@ export default function StaffManager({ datasets = [] }) {
           </div>
         </div>
       )}
+
+      {/* BULK STAFF CSV IMPORT MODAL */}
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto font-sans">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-150 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600/10 text-emerald-600 flex items-center justify-center font-bold">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 leading-tight">
+                    Bulk Import Faculty &amp; Subject Category
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Upload a CSV file containing staff credentials and subject categories
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBulkModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {bulkError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
+                <span>{bulkError}</span>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* Download Template Bar */}
+              <div className="flex items-center justify-between bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs">
+                <div>
+                  <div className="font-bold text-slate-800">Download Faculty CSV Template</div>
+                  <div className="text-[11px] text-slate-500">Pre-formatted headers: staffId, name, password, department, subjects</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={downloadSampleStaffCSV}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold rounded-xl flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" /> Sample CSV
+                </button>
+              </div>
+
+              {/* Upload Box */}
+              <div
+                onClick={() => staffFileInputRef.current?.click()}
+                className="p-8 border-2 border-dashed border-slate-200 hover:border-emerald-500/50 hover:bg-emerald-50/20 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer group transition-all"
+              >
+                <Upload className="w-8 h-8 text-slate-400 group-hover:text-emerald-600 mb-2" />
+                <span className="text-xs font-bold text-slate-800">
+                  {bulkFileName ? bulkFileName : "Click to select Faculty CSV file"}
+                </span>
+                <span className="text-[10px] text-slate-400 mt-0.5">Supports UTF-8 .csv files</span>
+                <input
+                  type="file"
+                  ref={staffFileInputRef}
+                  accept=".csv, text/csv"
+                  onChange={handleStaffFileChange}
+                  className="hidden"
+                />
+              </div>
+
+              {/* Preview Table */}
+              {parsedStaffs.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-slate-700">Preview ({parsedStaffs.length} Staff Members)</div>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-40 overflow-y-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                          <th className="p-2">ID</th>
+                          <th className="p-2">Name</th>
+                          <th className="p-2">Department</th>
+                          <th className="p-2">Subjects</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {parsedStaffs.slice(0, 5).map((st, idx) => (
+                          <tr key={idx}>
+                            <td className="p-2 font-mono font-bold text-[11px]">{st.staffId}</td>
+                            <td className="p-2 font-semibold text-slate-900">{st.name}</td>
+                            <td className="p-2">{st.department}</td>
+                            <td className="p-2 font-mono text-[11px] text-indigo-600">{st.subjects?.join(", ")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 pt-3 border-t border-slate-150">
+              <button
+                type="button"
+                onClick={() => setIsBulkModalOpen(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkStaffSubmit}
+                disabled={parsedStaffs.length === 0 || isUploadingBulk}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-200 disabled:opacity-40"
+              >
+                {isUploadingBulk ? "Importing..." : `Import ${parsedStaffs.length} Faculty Members`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

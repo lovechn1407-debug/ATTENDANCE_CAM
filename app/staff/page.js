@@ -7,6 +7,10 @@ import {
   subscribeToDatasets, 
   subscribeToAttendanceLogs, 
   subscribeToStaffs,
+  subscribeToScreens,
+  subscribeToAllScreeningSessions,
+  startScreeningSession,
+  stopScreeningSession,
   verifyStaffLogin, 
   updateAttendanceForDate 
 } from "@/lib/firebase";
@@ -32,7 +36,13 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
-  Sparkles
+  Sparkles,
+  Tv,
+  Play,
+  Square,
+  BookOpen,
+  Power,
+  GraduationCap
 } from "lucide-react";
 
 export default function StaffPanelPage() {
@@ -50,10 +60,17 @@ export default function StaffPanelPage() {
   const [students, setStudents] = useState([]);
   const [datasets, setDatasets] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const [activeScreeningSessions, setActiveScreeningSessions] = useState({});
+  const [registeredScreens, setRegisteredScreens] = useState([]);
 
   // Selected Dataset & Date
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
+
+  // Live Class Screening Controller State
+  const [selectedScreenId, setSelectedScreenId] = useState("SCREEN_01");
+  const [selectedSubject, setSelectedSubject] = useState("");
+  const [isActivatingSession, setIsActivatingSession] = useState(false);
 
   // Calendar Modal State
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -89,6 +106,8 @@ export default function StaffPanelPage() {
     const unsubStudents = subscribeToStudents(setStudents);
     const unsubDatasets = subscribeToDatasets(setDatasets);
     const unsubLogs = subscribeToAttendanceLogs(setAttendanceLogs);
+    const unsubSessions = subscribeToAllScreeningSessions(setActiveScreeningSessions);
+    const unsubScreens = subscribeToScreens(setRegisteredScreens);
 
     // Live subscription to Staffs collection so Admin dataset assignment updates appear instantly
     const unsubStaffs = subscribeToStaffs((staffsList) => {
@@ -103,15 +122,25 @@ export default function StaffPanelPage() {
       unsubStudents();
       unsubDatasets();
       unsubLogs();
+      unsubSessions();
+      unsubScreens();
       unsubStaffs();
     };
   }, [currentStaffId]);
 
-  // Assigned datasets for logged-in staff
+  // Available Screens List (Fallback to SCREEN_01, SCREEN_02 if empty)
+  const availableScreenIds = useMemo(() => {
+    if (registeredScreens.length > 0) {
+      return registeredScreens.map(s => s.screenId || s.id);
+    }
+    return ["SCREEN_01", "SCREEN_02", "SCREEN_03"];
+  }, [registeredScreens]);
+
+  // Assigned datasets for logged-in staff (or all datasets if none explicitly filtered)
   const assignedDatasets = useMemo(() => {
-    if (!currentStaff) return [];
+    if (!currentStaff) return datasets;
     const assignedIds = currentStaff.assignedDatasets || [];
-    if (assignedIds.length === 0) return [];
+    if (assignedIds.length === 0) return datasets; // Fallback to allow faculty to select any dataset
     return datasets.filter((d) => assignedIds.includes(d.id));
   }, [datasets, currentStaff]);
 
@@ -124,22 +153,103 @@ export default function StaffPanelPage() {
 
   // Current Active Dataset object
   const activeDataset = useMemo(() => {
-    return assignedDatasets.find((d) => d.id === selectedDatasetId) || assignedDatasets[0] || null;
-  }, [assignedDatasets, selectedDatasetId]);
+    return assignedDatasets.find((d) => d.id === selectedDatasetId) || assignedDatasets[0] || datasets[0] || null;
+  }, [assignedDatasets, selectedDatasetId, datasets]);
+
+  // Available Subjects for staff (from staff subjects or active dataset subject)
+  const staffSubjectOptions = useMemo(() => {
+    const set = new Set();
+    if (activeDataset?.subject) set.add(activeDataset.subject);
+    if (Array.isArray(currentStaff?.subjects)) {
+      currentStaff.subjects.forEach(s => {
+        if (s && s.trim()) set.add(s.trim());
+      });
+    }
+    if (set.size === 0) {
+      set.add("Data Structures & Algorithms");
+      set.add("Database Management Systems");
+      set.add("Operating Systems");
+      set.add("Computer Networks");
+    }
+    return Array.from(set);
+  }, [activeDataset, currentStaff]);
+
+  // Set default subject if not set
+  useEffect(() => {
+    if (staffSubjectOptions.length > 0 && (!selectedSubject || !staffSubjectOptions.includes(selectedSubject))) {
+      setSelectedSubject(staffSubjectOptions[0]);
+    }
+  }, [staffSubjectOptions, selectedSubject]);
 
   // Students belonging to activeDataset
   const datasetStudents = useMemo(() => {
-    if (!activeDataset) return [];
+    if (!activeDataset) return students;
     return students.filter((student) => {
       if (activeDataset.studentIds && activeDataset.studentIds.length > 0) {
         return activeDataset.studentIds.includes(student.studentId || student.id);
       }
-      const matchClass = activeDataset.classes?.length ? activeDataset.classes.includes(student.class) : true;
-      const matchSection = activeDataset.sections?.length ? activeDataset.sections.includes(student.section) : true;
-      const matchGroup = activeDataset.groups?.length ? activeDataset.groups.includes(student.group) : true;
-      return matchClass && matchSection && matchGroup;
+      const matchDept = activeDataset.department ? (student.department || "Computer Science") === activeDataset.department : true;
+      const matchCourse = activeDataset.course ? (student.course || student.class || "B.Tech") === activeDataset.course : true;
+      const matchBranch = activeDataset.branch ? (student.branch || "CSE") === activeDataset.branch : true;
+      const matchSec = activeDataset.section ? (student.section || "A") === activeDataset.section : true;
+      const matchGrp = activeDataset.group ? (student.group || "G1") === activeDataset.group : true;
+      return matchDept && matchCourse && matchBranch && matchSec && matchGrp;
     });
   }, [students, activeDataset]);
+
+  // Live active screening session status for selectedScreenId
+  const liveSessionForScreen = activeScreeningSessions[selectedScreenId];
+  const isScreenActive = liveSessionForScreen && liveSessionForScreen.active;
+
+  // Screening Session Control Handlers
+  const handleStartScreening = async () => {
+    if (!activeDataset) {
+      alert("Please select a dataset roster first.");
+      return;
+    }
+
+    setIsActivatingSession(true);
+    try {
+      const studentIds = activeDataset.studentIds && activeDataset.studentIds.length > 0
+        ? activeDataset.studentIds
+        : datasetStudents.map(s => s.studentId || s.id);
+
+      await startScreeningSession({
+        screenId: selectedScreenId,
+        staffId: currentStaff.staffId || currentStaff.id,
+        staffName: currentStaff.name,
+        subject: selectedSubject || activeDataset.subject || "General Subject",
+        datasetId: activeDataset.id,
+        datasetName: activeDataset.name,
+        department: activeDataset.department || currentStaff.department || "Computer Science",
+        course: activeDataset.course || "B.Tech",
+        branch: activeDataset.branch || "CSE",
+        section: activeDataset.section || "A",
+        group: activeDataset.group || "G1",
+        studentIds
+      });
+
+      showToast(`Screening session ACTIVATED on ${selectedScreenId} for ${selectedSubject}!`);
+    } catch (err) {
+      alert("Failed to start screening session: " + err.message);
+    } finally {
+      setIsActivatingSession(false);
+    }
+  };
+
+  const handleStopScreening = async () => {
+    if (confirm(`Disable screening session on ${selectedScreenId}? Student scanning will pause.`)) {
+      setIsActivatingSession(true);
+      try {
+        await stopScreeningSession(selectedScreenId);
+        showToast(`Screening session DISABLED on ${selectedScreenId}`);
+      } catch (err) {
+        alert("Failed to stop screening session: " + err.message);
+      } finally {
+        setIsActivatingSession(false);
+      }
+    }
+  };
 
   // Attendance logs for selectedDate
   const logsForSelectedDate = useMemo(() => {
@@ -579,6 +689,121 @@ export default function StaffPanelPage() {
         {/* ─── TAB 2: DATASET ROSTER & DYNAMIC COLOR DATE PICKER ──────────── */}
         {activeNavTab === "roster" && (
           <div className="space-y-5">
+            {/* ─── LIVE CLASS SCREENING CONTROLLER (STAFF TO SCREENING PANEL CONTROLLER) ─── */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-3xl border border-indigo-500/30 shadow-xl space-y-5 relative overflow-hidden">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-lg shadow-indigo-500/30 shrink-0">
+                    <Tv className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-black tracking-tight text-white">Live Class Screening Controller</h2>
+                      {isScreenActive ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-extrabold flex items-center gap-1.5 animate-pulse">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400" /> ACTIVE BROADCASTING
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-extrabold">
+                          STANDBY
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      Select target Screening Screen ID &amp; Subject to start scanning students for this dataset class.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Screening Action Buttons */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {isScreenActive ? (
+                    <button
+                      onClick={handleStopScreening}
+                      disabled={isActivatingSession}
+                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold uppercase tracking-wider rounded-xl shadow-lg shadow-rose-600/30 flex items-center gap-2 transition-all disabled:opacity-50"
+                    >
+                      <Power className="w-4 h-4" />
+                      <span>Disable / End Session</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleStartScreening}
+                      disabled={isActivatingSession}
+                      className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/30 flex items-center gap-2 transition-all disabled:opacity-50"
+                    >
+                      <Play className="w-4 h-4 fill-slate-950" />
+                      <span>Confirm &amp; Start Live Screening</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Controls Selector Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* 1. Target Screen ID */}
+                <div className="space-y-1.5 bg-white/5 p-3.5 rounded-2xl border border-white/10 backdrop-blur-md">
+                  <label className="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Tv className="w-3.5 h-3.5 text-indigo-400" /> Target Screen ID
+                  </label>
+                  <select
+                    value={selectedScreenId}
+                    onChange={(e) => setSelectedScreenId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:border-indigo-400 cursor-pointer"
+                  >
+                    {availableScreenIds.map((sId) => (
+                      <option key={sId} value={sId}>
+                        {sId} {activeScreeningSessions[sId]?.active ? "(Currently Active)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Subject Dropdown */}
+                <div className="space-y-1.5 bg-white/5 p-3.5 rounded-2xl border border-white/10 backdrop-blur-md">
+                  <label className="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-indigo-400" /> Select Subject
+                  </label>
+                  <select
+                    value={selectedSubject}
+                    onChange={(e) => setSelectedSubject(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-indigo-400 cursor-pointer"
+                  >
+                    {staffSubjectOptions.map((sub) => (
+                      <option key={sub} value={sub}>
+                        {sub}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3. Selected Dataset Roster Info */}
+                <div className="space-y-1.5 bg-white/5 p-3.5 rounded-2xl border border-white/10 backdrop-blur-md">
+                  <label className="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <GraduationCap className="w-3.5 h-3.5 text-indigo-400" /> Active Roster ({datasetStudents.length})
+                  </label>
+                  <div className="px-3 py-1.5 bg-slate-900/80 border border-slate-700 rounded-xl text-xs font-semibold text-white truncate">
+                    {activeDataset ? activeDataset.name : "Select Dataset Below"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Session Info Banner (if session active) */}
+              {isScreenActive && liveSessionForScreen && (
+                <div className="bg-emerald-950/60 border border-emerald-500/40 p-3.5 rounded-2xl text-xs font-medium flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-emerald-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>
+                      Faculty <strong>{liveSessionForScreen.staffName}</strong> is screening subject <strong>{liveSessionForScreen.subject}</strong> on screen <strong>{liveSessionForScreen.screenId}</strong>.
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-emerald-400 font-bold shrink-0">
+                    Session ID: {liveSessionForScreen.sessionId}
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Datasets Selector Tabs */}
             <div className="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3 shadow-xs">
               <div className="flex items-center justify-between">
@@ -969,8 +1194,8 @@ export default function StaffPanelPage() {
                   <thead className="bg-slate-50 text-xs uppercase tracking-wider font-bold text-slate-500 border-b border-slate-200">
                     <tr>
                       <th className="py-3.5 px-6">Student</th>
+                      <th className="py-3.5 px-6">Subject &amp; Faculty</th>
                       <th className="py-3.5 px-6">Dataset</th>
-                      <th className="py-3.5 px-6 text-center">Scan Type</th>
                       <th className="py-3.5 px-6 text-center">Date</th>
                       <th className="py-3.5 px-6 text-right">Time</th>
                     </tr>
@@ -987,15 +1212,14 @@ export default function StaffPanelPage() {
                         <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3.5 px-6">
                             <div className="font-bold text-slate-900">{log.name}</div>
-                            <div className="text-xs text-slate-500 font-mono">ID: {log.studentId} • Class {log.class}-{log.section}</div>
+                            <div className="text-xs text-slate-500 font-mono">ID: {log.studentId} • {log.course || log.class} ({log.branch || "CSE"}) - {log.section}</div>
+                          </td>
+                          <td className="py-3.5 px-6">
+                            <div className="font-bold text-indigo-700">{log.subject || "General Subject"}</div>
+                            <div className="text-[11px] text-slate-500 font-medium">Faculty: {log.staffName || "Staff"}</div>
                           </td>
                           <td className="py-3.5 px-6 font-semibold text-slate-700">
                             {log.datasetName || "General"}
-                          </td>
-                          <td className="py-3.5 px-6 text-center">
-                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
-                              {log.type || "ENTRY"}
-                            </span>
                           </td>
                           <td className="py-3.5 px-6 text-center font-mono text-xs text-slate-600">
                             {log.date}

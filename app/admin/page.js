@@ -12,13 +12,14 @@ import StaffManager from "@/components/admin/StaffManager";
 import SuspensionList from "@/components/admin/SuspensionList";
 import CameraConfig from "@/components/admin/CameraConfig";
 import RegistrationSnackbar from "@/components/admin/RegistrationSnackbar";
-import { subscribeToStudents, subscribeToDatasets, triggerScreenReload } from "@/lib/firebase";
+import { subscribeToStudents, subscribeToDatasets, subscribeToStaffs, triggerScreenReload } from "@/lib/firebase";
 import { Clock, RefreshCw, CheckCircle2, Loader2 } from "lucide-react";
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("students"); // "students" | "datasets" | "attendance" | "suspension" | "staff" | "camera"
   const [students, setStudents] = useState([]);
   const [datasets, setDatasets] = useState([]);
+  const [staffs, setStaffs] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isUpdatePhotosModalOpen, setIsUpdatePhotosModalOpen] = useState(false);
@@ -35,6 +36,7 @@ export default function AdminPage() {
   useEffect(() => {
     const unsubStudents = subscribeToStudents(setStudents);
     const unsubDatasets = subscribeToDatasets(setDatasets);
+    const unsubStaffs = subscribeToStaffs(setStaffs);
 
     const timer = setInterval(() => {
       setCurrentTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -43,6 +45,7 @@ export default function AdminPage() {
     return () => {
       unsubStudents();
       unsubDatasets();
+      unsubStaffs();
       clearInterval(timer);
     };
   }, []);
@@ -96,10 +99,10 @@ export default function AdminPage() {
           <div>
             <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
               {activeTab === "students" && "Student Master Database"}
-              {activeTab === "datasets" && "Entry / Exit Datasets"}
-              {activeTab === "attendance" && "Attendance Records & Setwise Results"}
+              {activeTab === "datasets" && "College Class Datasets & Subjects"}
+              {activeTab === "attendance" && "Attendance Records & Period-Wise Results"}
               {activeTab === "suspension" && "Student Suspension Management"}
-              {activeTab === "staff" && "Staff Accounts & Dataset Access"}
+              {activeTab === "staff" && "Faculty Accounts & Subject Category"}
               {activeTab === "camera" && "Hardware Camera & Biometrics"}
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -158,7 +161,7 @@ export default function AdminPage() {
           )}
 
           {activeTab === "datasets" && (
-            <DatasetManager datasets={datasets} students={students} />
+            <DatasetManager datasets={datasets} students={students} staffs={staffs} />
           )}
 
           {activeTab === "attendance" && (

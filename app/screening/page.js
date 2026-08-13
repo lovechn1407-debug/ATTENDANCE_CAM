@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import DatasetHeader from "@/components/screening/DatasetHeader";
 import { 
   subscribeToStudents, 
   subscribeToDatasets, 
   subscribeToAttendanceLogs, 
   subscribeToScreenConfig,
+  subscribeToActiveScreeningSession,
   updateScreenConfig,
   recordAttendance,
   subscribeToScreens,
@@ -98,6 +100,7 @@ export default function ScreeningPage() {
   const [students, setStudents] = useState([]);
   const [activeDatasets, setActiveDatasets] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const [activeSession, setActiveSession] = useState(null);
   const [screenConfig, setScreenConfig] = useState({ 
     mode: "NORMAL", 
     adminMessage: "", 
@@ -162,11 +165,21 @@ export default function ScreeningPage() {
   const attendanceLogsRef = useRef([]);
   const statusStateRef = useRef("IDLE");
   const screenConfigRef = useRef(screenConfig);
+  const activeSessionRef = useRef(null);
+
   useEffect(() => { studentsRef.current = students; }, [students]);
   useEffect(() => { activeDatasetsRef.current = activeDatasets; }, [activeDatasets]);
   useEffect(() => { attendanceLogsRef.current = attendanceLogs; }, [attendanceLogs]);
   useEffect(() => { statusStateRef.current = statusState; }, [statusState]);
   useEffect(() => { screenConfigRef.current = screenConfig; }, [screenConfig]);
+  useEffect(() => { activeSessionRef.current = activeSession; }, [activeSession]);
+
+  // Subscribe to active screening session when connectedScreenId is authenticated
+  useEffect(() => {
+    const sId = connectedScreenId || "SCREEN_01";
+    const unsub = subscribeToActiveScreeningSession(sId, setActiveSession);
+    return () => unsub();
+  }, [connectedScreenId]);
 
   // Network Offline / Online listener
   useEffect(() => {
@@ -579,43 +592,44 @@ export default function ScreeningPage() {
                     setActiveMatch(student);
                     playStateAudio("SUSPENDED");
                   } else {
-                    const ds = activeDatasetsRef.current;
-                    const matched = ds.length > 0 ? ds.find((d) => {
-                      if (d.studentIds && d.studentIds.length > 0) {
-                        return d.studentIds.includes(student.studentId || student.id);
-                      }
-                      const okC = d.classes?.length ? d.classes.includes(student.class) : true;
-                      const okS = d.sections?.length ? d.sections.includes(student.section) : true;
-                      const okG = d.groups?.length ? d.groups.includes(student.group) : true;
-                      return okC && okS && okG;
-                    }) : null;
+                    const currentSession = activeSessionRef.current;
+                    const sessionActive = currentSession && currentSession.active;
 
-                    if (!matched) {
+                    if (!sessionActive) {
+                      // Standby mode: No live screening session active for this screen
                       setStatusState("NOT_IN_SET");
                       setActiveMatch(student);
                       playStateAudio("NOT_IN_SET");
                     } else {
-                      const today = new Date().toISOString().split("T")[0];
-                      const already = attendanceLogsRef.current.find(
-                        (l) => (l.studentId === studentId || l.studentId === student.id) && l.date === today
-                      );
-
-                      if (already) {
-                        setStatusState("ATTENDANCE_ALREADY_MARKED");
-                        setActiveMatch(student);
-                        if (already.formattedTime) setMatchTimestamp(already.formattedTime);
-                        playStateAudio("ATTENDANCE_ALREADY_MARKED");
+                      // Validate if student belongs to active screening session dataset
+                      let isStudentInSession = false;
+                      if (Array.isArray(currentSession.studentIds) && currentSession.studentIds.length > 0) {
+                        isStudentInSession = currentSession.studentIds.includes(studentId);
                       } else {
-                        let late = false;
-                        if (matched.timing?.maxEntryTime) {
-                          const [ch, cm] = matched.timing.maxEntryTime.split(":").map(Number);
-                          const d = new Date();
-                          late = d.getHours() > ch || (d.getHours() === ch && d.getMinutes() > cm);
-                        }
-                        if (late) {
-                          setStatusState("TIME_EXCEEDED");
+                        const matchDept = currentSession.department ? (student.department || "Computer Science") === currentSession.department : true;
+                        const matchCourse = currentSession.course ? (student.course || student.class || "B.Tech") === currentSession.course : true;
+                        const matchBranch = currentSession.branch ? (student.branch || "CSE") === currentSession.branch : true;
+                        const matchSec = currentSession.section ? (student.section || "A") === currentSession.section : true;
+                        const matchGrp = currentSession.group ? (student.group || "G1") === currentSession.group : true;
+                        isStudentInSession = matchDept && matchCourse && matchBranch && matchSec && matchGrp;
+                      }
+
+                      if (!isStudentInSession) {
+                        setStatusState("NOT_IN_SET");
+                        setActiveMatch(student);
+                        playStateAudio("NOT_IN_SET");
+                      } else {
+                        const today = new Date().toISOString().split("T")[0];
+                        const already = attendanceLogsRef.current.find(
+                          (l) => (l.studentId === studentId || l.studentId === student.id) &&
+                                 (l.sessionId === currentSession.sessionId || (l.date === today && l.subject === currentSession.subject))
+                        );
+
+                        if (already) {
+                          setStatusState("ATTENDANCE_ALREADY_MARKED");
                           setActiveMatch(student);
-                          playStateAudio("TIME_EXCEEDED");
+                          if (already.formattedTime) setMatchTimestamp(already.formattedTime);
+                          playStateAudio("ATTENDANCE_ALREADY_MARKED");
                         } else {
                           // Trigger liveness challenge if enabled
                           const liveMode = screenConfigRef.current?.livenessMode || "OFF";
@@ -627,10 +641,16 @@ export default function ScreeningPage() {
                             recordAttendance({
                               studentId,
                               name: student.name,
-                              class: student.class,
-                              section: student.section,
-                              group: student.group,
-                              datasetName: matched.name || "Master List",
+                              department: student.department || currentSession.department || "Computer Science",
+                              course: student.course || student.class || "B.Tech",
+                              branch: student.branch || "CSE",
+                              section: student.section || "A",
+                              group: student.group || "G1",
+                              datasetName: currentSession.datasetName || "Live Class",
+                              sessionId: currentSession.sessionId,
+                              subject: currentSession.subject,
+                              staffId: currentSession.staffId,
+                              staffName: currentSession.staffName,
                               type: "ENTRY",
                               timestamp: new Date().toISOString()
                             }).catch(console.error);
@@ -797,25 +817,13 @@ export default function ScreeningPage() {
         </div>
       ) : (
         <div className="flex-1 flex flex-col font-sans overflow-hidden">
-          {/* === TOP STATUS BAR (Dark Greyish-Black Bar) === */}
-          <div className="bg-[#0c0c0e]/95 backdrop-blur-md border-b border-white/10 px-5 py-2.5 shrink-0 flex items-center justify-between z-30">
-            {/* Left: Screen ID (No overflow) */}
-            <div className="min-w-0 max-w-[60%] flex items-center gap-2 shrink">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              <span className="text-sm sm:text-base font-black font-mono text-white tracking-wider uppercase truncate">
-                ID: {connectedScreenId || "SCREEN_01"}
-              </span>
-            </div>
-
-            {/* Right: Date on top, Time lower (No box, small text in corner) */}
-            <div className="flex flex-col items-end text-right shrink-0">
-              <span className="text-[10px] tracking-wider uppercase font-semibold text-neutral-400">
-                {currentDate}
-              </span>
-              <span className="text-xs font-mono font-bold text-indigo-400 tracking-wide">
-                {currentTime}
-              </span>
-            </div>
+          {/* === TOP DATASET & FACULTY HEADER BAR === */}
+          <div className="p-3 shrink-0 z-30">
+            <DatasetHeader
+              activeSession={activeSession}
+              screenId={connectedScreenId || "SCREEN_01"}
+              currentTime={currentTime}
+            />
           </div>
 
           {/* === CAMERA CIRCLE SECTION === */}

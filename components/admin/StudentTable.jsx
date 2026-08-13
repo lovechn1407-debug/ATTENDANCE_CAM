@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { 
   Search, 
   UserPlus, 
@@ -13,7 +13,8 @@ import {
   Building2,
   Users,
   Camera,
-  Edit
+  Edit,
+  GraduationCap
 } from "lucide-react";
 import { deleteStudent } from "@/lib/firebase";
 
@@ -25,30 +26,36 @@ export default function StudentTable({
   onEditStudent 
 }) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [classFilter, setClassFilter] = useState("ALL");
-  const [groupFilter, setGroupFilter] = useState("ALL");
+  const [departmentFilter, setDepartmentFilter] = useState("ALL");
+  const [courseFilter, setCourseFilter] = useState("ALL");
+  const [branchFilter, setBranchFilter] = useState("ALL");
   const [deletingId, setDeletingId] = useState(null);
 
   // Missing photos count
   const missingPhotosCount = students.filter(s => !s.photoUrl || s.photoUrl.trim() === "").length;
 
-  // Extract unique classes
-  const availableClasses = Array.from(
-    new Set(students.map((s) => s.class).filter(Boolean))
-  ).sort();
+  // Extract unique departments, courses, and branches
+  const availableDepartments = useMemo(() => Array.from(new Set(students.map(s => s.department || "Computer Science"))).sort(), [students]);
+  const availableCourses = useMemo(() => Array.from(new Set(students.map(s => s.course || s.class || "B.Tech"))).sort(), [students]);
+  const availableBranches = useMemo(() => Array.from(new Set(students.map(s => s.branch || "CSE"))).sort(), [students]);
 
   // Filter students logic
   const filteredStudents = students.filter((student) => {
+    const query = searchTerm.toLowerCase();
     const matchesSearch =
-      student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.studentId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.class.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.section.toLowerCase().includes(searchTerm.toLowerCase());
+      (student.name && student.name.toLowerCase().includes(query)) ||
+      (student.studentId && student.studentId.toLowerCase().includes(query)) ||
+      (student.department && student.department.toLowerCase().includes(query)) ||
+      (student.course && student.course.toLowerCase().includes(query)) ||
+      (student.branch && student.branch.toLowerCase().includes(query)) ||
+      (student.section && student.section.toLowerCase().includes(query)) ||
+      (student.group && student.group.toLowerCase().includes(query));
 
-    const matchesClass = classFilter === "ALL" || student.class === classFilter;
-    const matchesGroup = groupFilter === "ALL" || student.group === groupFilter;
+    const matchesDept = departmentFilter === "ALL" || (student.department || "Computer Science") === departmentFilter;
+    const matchesCourse = courseFilter === "ALL" || (student.course || student.class) === courseFilter;
+    const matchesBranch = branchFilter === "ALL" || (student.branch || "CSE") === branchFilter;
 
-    return matchesSearch && matchesClass && matchesGroup;
+    return matchesSearch && matchesDept && matchesCourse && matchesBranch;
   });
 
   const handleDelete = async (id, name) => {
@@ -70,10 +77,10 @@ export default function StudentTable({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-600" /> Master Student Database
+            <GraduationCap className="w-5 h-5 text-indigo-600" /> College Master Student Database
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Total Enrolled: <span className="font-semibold text-slate-800">{students.length}</span> students across classes &amp; groups.
+            Total Enrolled: <span className="font-semibold text-slate-800">{students.length}</span> students across departments &amp; courses.
           </p>
         </div>
 
@@ -112,11 +119,11 @@ export default function StudentTable({
       {/* Filter Controls Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
         {/* Search Input */}
-        <div className="relative flex-1 min-w-[260px]">
+        <div className="relative flex-1 min-w-[240px]">
           <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by Name, ID, Class..."
+            placeholder="Search by Name, ID, Dept, Course, Branch, Sec..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
@@ -124,32 +131,50 @@ export default function StudentTable({
         </div>
 
         {/* Dropdown Filters */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Department Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs text-slate-500 font-medium">Class:</span>
+            <span className="text-xs text-slate-500 font-medium">Dept:</span>
             <select
-              value={classFilter}
-              onChange={(e) => setClassFilter(e.target.value)}
-              className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer max-w-[130px] truncate"
             >
-              <option value="ALL">All Classes</option>
-              {availableClasses.map((cls) => (
-                <option key={cls} value={cls}>Class {cls}</option>
+              <option value="ALL">All Depts</option>
+              {availableDepartments.map((dept) => (
+                <option key={dept} value={dept}>{dept}</option>
               ))}
             </select>
           </div>
 
-          <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-            <span className="text-xs text-slate-500 font-medium">Group:</span>
+          {/* Course Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+            <span className="text-xs text-slate-500 font-medium">Course:</span>
             <select
-              value={groupFilter}
-              onChange={(e) => setGroupFilter(e.target.value)}
+              value={courseFilter}
+              onChange={(e) => setCourseFilter(e.target.value)}
               className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
             >
-              <option value="ALL">All Groups</option>
-              <option value="A">Group A</option>
-              <option value="B">Group B</option>
+              <option value="ALL">All Courses</option>
+              {availableCourses.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Branch Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+            <span className="text-xs text-slate-500 font-medium">Branch:</span>
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">All Branches</option>
+              {availableBranches.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -163,8 +188,8 @@ export default function StudentTable({
               <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                 <th className="py-3.5 px-4">Student Info</th>
                 <th className="py-3.5 px-4">Student ID</th>
-                <th className="py-3.5 px-4">Class &amp; Sec</th>
-                <th className="py-3.5 px-4">Group</th>
+                <th className="py-3.5 px-4">Department &amp; Course</th>
+                <th className="py-3.5 px-4">Branch / Sec / Group</th>
                 <th className="py-3.5 px-4">Biometric Descriptor</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
@@ -215,22 +240,22 @@ export default function StudentTable({
                         {student.studentId}
                       </td>
 
-                      {/* Class & Sec */}
+                      {/* Department & Course */}
                       <td className="py-3 px-4">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                          Class {student.class} - {student.section}
-                        </span>
+                        <div className="font-semibold text-slate-800">{student.department || "Computer Science"}</div>
+                        <div className="text-[11px] text-indigo-600 font-medium">{student.course || student.class || "B.Tech"}</div>
                       </td>
 
-                      {/* Group */}
+                      {/* Branch / Sec / Group */}
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          student.group === "A"
-                            ? "bg-blue-50 text-blue-700 border border-blue-200"
-                            : "bg-purple-50 text-purple-700 border border-purple-200"
-                        }`}>
-                          Group {student.group}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                            {student.branch || "CSE"} - {student.section || "A"}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            Grp {student.group || "G1"}
+                          </span>
+                        </div>
                       </td>
 
                       {/* Biometric Status */}
@@ -280,3 +305,4 @@ export default function StudentTable({
     </div>
   );
 }
+
