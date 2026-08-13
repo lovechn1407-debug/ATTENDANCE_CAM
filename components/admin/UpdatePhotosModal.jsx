@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { 
   X, 
   Camera, 
@@ -16,8 +17,13 @@ import {
   UserX,
   RefreshCw,
   Search,
-  Check
+  Check,
+  QrCode,
+  Smartphone,
+  Copy,
+  ExternalLink
 } from "lucide-react";
+import { createMobileCaptureSession, subscribeToMobileCaptureSession, deleteMobileCaptureSession } from "@/lib/firebase";
 
 export default function UpdatePhotosModal({ isOpen, onClose, students = [], onStartRegistration }) {
   const [selectedClass, setSelectedClass] = useState("ALL");
@@ -34,9 +40,16 @@ export default function UpdatePhotosModal({ isOpen, onClose, students = [], onSt
   const [currentPoseIndex, setCurrentPoseIndex] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
 
+  // QR Code Session State
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [qrSessionId, setQrSessionId] = useState("");
+  const [qrUrl, setQrUrl] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
+
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
+  const qrUnsubRef = useRef(null);
 
   // Stop Webcam Stream Helper
   const stopCamera = () => {
@@ -44,6 +57,18 @@ export default function UpdatePhotosModal({ isOpen, onClose, students = [], onSt
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
+  };
+
+  const stopQrSession = () => {
+    if (qrUnsubRef.current) {
+      qrUnsubRef.current();
+      qrUnsubRef.current = null;
+    }
+    if (qrSessionId) {
+      deleteMobileCaptureSession(qrSessionId).catch(() => {});
+    }
+    setIsQrModalOpen(false);
+    setQrSessionId("");
   };
 
   // Start Camera for current wizard student
@@ -63,6 +88,46 @@ export default function UpdatePhotosModal({ isOpen, onClose, students = [], onSt
       }
     } catch (err) {
       setErrorMessage("Could not access webcam: " + err.message);
+    }
+  };
+
+  const handleStartQrSession = async () => {
+    setErrorMessage("");
+    const currentStudent = wizardQueue[wizardIndex];
+    const sessionId = `qr_sub_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+    setQrSessionId(sessionId);
+
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const targetUrl = `${origin}/mobile-capture?session=${sessionId}`;
+    setQrUrl(targetUrl);
+
+    try {
+      await createMobileCaptureSession(sessionId, { studentId: currentStudent?.studentId, name: currentStudent?.name });
+      setIsQrModalOpen(true);
+
+      qrUnsubRef.current = subscribeToMobileCaptureSession(sessionId, (data) => {
+        if (data && data.status === "completed" && Array.isArray(data.photos) && data.photos.length > 0) {
+          const photos = data.photos;
+          setCapturedPoses({
+            center: photos[0],
+            left: photos[1] || photos[0],
+            right: photos[2] || photos[0]
+          });
+          setTimeout(() => {
+            stopQrSession();
+          }, 1500);
+        }
+      });
+    } catch (err) {
+      setErrorMessage("Failed to start phone camera session: " + err.message);
+    }
+  };
+
+  const handleCopyQrLink = () => {
+    if (qrUrl) {
+      navigator.clipboard.writeText(qrUrl);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
     }
   };
 
@@ -407,15 +472,26 @@ export default function UpdatePhotosModal({ isOpen, onClose, students = [], onSt
                     <ArrowRight className="w-4 h-4" />
                   </button>
 
-                  <button
-                    onClick={() => {
-                      setCapturedPoses({ center: null, left: null, right: null });
-                      setCurrentPoseIndex(0);
-                    }}
-                    className="w-full py-2 bg-slate-100 text-slate-600 font-semibold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Clear &amp; Re-snap Poses
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleStartQrSession}
+                      className="py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl border border-emerald-200 flex items-center justify-center gap-1.5"
+                    >
+                      <Smartphone className="w-3.5 h-3.5 text-emerald-600" /> Phone QR
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCapturedPoses({ center: null, left: null, right: null });
+                        setCurrentPoseIndex(0);
+                      }}
+                      className="py-2 bg-slate-100 text-slate-600 font-semibold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Re-snap
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -424,6 +500,7 @@ export default function UpdatePhotosModal({ isOpen, onClose, students = [], onSt
               <button
                 onClick={() => {
                   stopCamera();
+                  stopQrSession();
                   setIsWizardActive(false);
                 }}
                 className="text-slate-500 hover:text-slate-800 font-medium"
@@ -433,6 +510,89 @@ export default function UpdatePhotosModal({ isOpen, onClose, students = [], onSt
               <span className="text-slate-400 font-mono text-[11px]">
                 Background jobs process in snackbar
               </span>
+            </div>
+          </div>
+        )}
+
+        {/* ─── REALTIME QR CODE MOBILE PHONE CAMERA SESSION MODAL ─── */}
+        {isQrModalOpen && (
+          <div className="fixed inset-0 z-60 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-6 border border-slate-200 shadow-2xl space-y-5 text-center animate-in fade-in zoom-in duration-200">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                    <Smartphone className="w-4 h-4" />
+                  </div>
+                  <div className="text-left">
+                    <h4 className="text-sm font-bold text-slate-900 leading-tight">Phone Camera QR Code</h4>
+                    <p className="text-[10px] text-slate-500">Scan to open 3-pose camera</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={stopQrSession}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Generated QR Code Container */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 inline-block shadow-inner mx-auto">
+                {qrUrl ? (
+                  <QRCodeSVG value={qrUrl} size={180} level="M" />
+                ) : (
+                  <div className="w-[180px] h-[180px] flex items-center justify-center text-xs text-slate-400 font-mono">
+                    Generating QR...
+                  </div>
+                )}
+              </div>
+
+              {/* Live Listener Status Indicator */}
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs font-semibold text-emerald-900 flex items-center justify-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                <span>Waiting for phone camera submission...</span>
+              </div>
+
+              {/* Direct URL & Copy Link Option */}
+              <div className="space-y-2 pt-1 border-t border-slate-100">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Or Open Link on Mobile Browser:
+                </div>
+                <div className="flex items-center gap-1.5 bg-slate-50 p-2 rounded-xl border border-slate-200 text-xs">
+                  <input
+                    type="text"
+                    readOnly
+                    value={qrUrl}
+                    className="w-full bg-transparent font-mono text-[10px] text-slate-700 outline-none truncate"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyQrLink}
+                    className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold rounded-lg shrink-0 flex items-center gap-1 text-[11px]"
+                  >
+                    {isCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{isCopied ? "Copied" : "Copy"}</span>
+                  </button>
+                  <a
+                    href={qrUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1 text-indigo-600 hover:text-indigo-800 shrink-0"
+                    title="Open Link"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={stopQrSession}
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+              >
+                Cancel Phone Capture
+              </button>
             </div>
           </div>
         )}
