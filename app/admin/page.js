@@ -214,8 +214,3 @@ export default function AdminPage() {
     </div>
   );
 }
-        onDismissJob={handleDismissJob}
-      />
-    </div>
-  );
-}
