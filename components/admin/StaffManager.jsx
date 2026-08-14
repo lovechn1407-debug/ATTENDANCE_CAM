@@ -663,12 +663,6 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
                     </select>
                   </div>
                 </div>
-                      <option value="ALL">ALL Groups (G1 + G2)</option>
-                      <option value="G1">Group G1 Only</option>
-                      <option value="G2">Group G2 Only</option>
-                    </select>
-                  </div>
-                </div>
 
                 <button
                   type="button"
