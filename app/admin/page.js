@@ -10,14 +10,16 @@ import AttendanceRecords from "@/components/admin/AttendanceRecords";
 import StaffManager from "@/components/admin/StaffManager";
 import SuspensionList from "@/components/admin/SuspensionList";
 import CameraConfig from "@/components/admin/CameraConfig";
+import AcademicSettings from "@/components/admin/AcademicSettings";
 import RegistrationSnackbar from "@/components/admin/RegistrationSnackbar";
-import { subscribeToStudents, subscribeToStaffs, triggerScreenReload } from "@/lib/firebase";
+import { subscribeToStudents, subscribeToStaffs, subscribeToAcademicSettings, DEFAULT_ACADEMIC_SETTINGS, triggerScreenReload } from "@/lib/firebase";
 import { Clock, RefreshCw, CheckCircle2, Loader2 } from "lucide-react";
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState("students"); // "students" | "attendance" | "suspension" | "staff" | "camera"
+  const [activeTab, setActiveTab] = useState("students"); // "students" | "attendance" | "suspension" | "staff" | "academic" | "camera"
   const [students, setStudents] = useState([]);
   const [staffs, setStaffs] = useState([]);
+  const [academicSettings, setAcademicSettings] = useState(DEFAULT_ACADEMIC_SETTINGS);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isUpdatePhotosModalOpen, setIsUpdatePhotosModalOpen] = useState(false);
@@ -34,6 +36,7 @@ export default function AdminPage() {
   useEffect(() => {
     const unsubStudents = subscribeToStudents(setStudents);
     const unsubStaffs = subscribeToStaffs(setStaffs);
+    const unsubAcademic = subscribeToAcademicSettings(setAcademicSettings);
 
     const timer = setInterval(() => {
       setCurrentTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -42,6 +45,7 @@ export default function AdminPage() {
     return () => {
       unsubStudents();
       unsubStaffs();
+      unsubAcademic();
       clearInterval(timer);
     };
   }, []);
@@ -99,6 +103,7 @@ export default function AdminPage() {
               {activeTab === "attendance" && "Attendance Records & Period-Wise Results"}
               {activeTab === "suspension" && "Student Suspension Management"}
               {activeTab === "staff" && "Faculty Accounts & Subject Category"}
+              {activeTab === "academic" && "Academic Structure & Dropdown Settings"}
               {activeTab === "camera" && "Hardware Camera & Biometrics"}
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -165,7 +170,11 @@ export default function AdminPage() {
           )}
 
           {activeTab === "staff" && (
-            <StaffManager students={students} />
+            <StaffManager students={students} academicSettings={academicSettings} />
+          )}
+
+          {activeTab === "academic" && (
+            <AcademicSettings />
           )}
 
           {activeTab === "camera" && <CameraConfig />}
@@ -181,11 +190,13 @@ export default function AdminPage() {
         }}
         onStartRegistration={handleStartRegistration}
         studentToEdit={studentToEdit}
+        academicSettings={academicSettings}
       />
 
       <BulkUploadModal
         isOpen={isBulkModalOpen}
         onClose={() => setIsBulkModalOpen(false)}
+        academicSettings={academicSettings}
       />
 
       <UpdatePhotosModal
@@ -198,6 +209,11 @@ export default function AdminPage() {
       {/* Bottom-Right Floating Progress Snackbar for Background Registration */}
       <RegistrationSnackbar
         jobs={registrationQueue}
+        onDismissJob={handleDismissJob}
+      />
+    </div>
+  );
+}
         onDismissJob={handleDismissJob}
       />
     </div>

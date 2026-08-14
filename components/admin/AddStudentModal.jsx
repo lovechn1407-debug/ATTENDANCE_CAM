@@ -31,7 +31,13 @@ const POSES = [
   { step: 2, id: "right",  label: "Pose 3: Turn Right",  subtitle: "Turn head slightly to your right" }
 ];
 
-export default function AddStudentModal({ isOpen, onClose, onStartRegistration, studentToEdit = null }) {
+export default function AddStudentModal({ isOpen, onClose, onStartRegistration, studentToEdit = null, academicSettings = null }) {
+  const deptsList = academicSettings?.departments || ["Computer Science", "Information Technology", "Electronics & Comm", "Mechanical Engineering", "Electrical Engineering", "Civil Engineering"];
+  const coursesList = academicSettings?.courses || ["B.Tech", "M.Tech", "BCA", "MCA", "B.Sc", "M.Sc", "MBA", "BBA"];
+  const branchesList = academicSettings?.branches || ["CSE", "IT", "ECE", "ME", "EE", "CE", "AI/ML", "Data Science"];
+  const sectionsList = academicSettings?.sections || ["A", "B", "C", "D", "1", "2"];
+  const availableSubjects = academicSettings?.subjects || ["Data Structures", "Operating Systems", "Computer Networks", "Database Systems", "Machine Learning", "Software Engineering"];
+
   const [studentId, setStudentId] = useState("");
   const [name, setName] = useState("");
   const [department, setDepartment] = useState("Computer Science");
@@ -39,7 +45,7 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
   const [branch, setBranch] = useState("CSE");
   const [section, setSection] = useState("A");
   const [group, setGroup] = useState("G1");
-  const [subjectsStr, setSubjectsStr] = useState("Data Structures, Operating Systems");
+  const [selectedSubjects, setSelectedSubjects] = useState(["Data Structures", "Operating Systems"]);
 
   // Multi-Side Pose Photos State { center: null, left: null, right: null }
   const [capturedPoses, setCapturedPoses] = useState({ center: null, left: null, right: null });
@@ -88,15 +94,15 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
       if (studentToEdit) {
         setStudentId(studentToEdit.studentId || studentToEdit.id);
         setName(studentToEdit.name || "");
-        setDepartment(studentToEdit.department || "Computer Science");
-        setCourse(studentToEdit.course || studentToEdit.class || "B.Tech");
-        setBranch(studentToEdit.branch || "CSE");
-        setSection(studentToEdit.section || "A");
+        setDepartment(studentToEdit.department || deptsList[0] || "Computer Science");
+        setCourse(studentToEdit.course || studentToEdit.class || coursesList[0] || "B.Tech");
+        setBranch(studentToEdit.branch || branchesList[0] || "CSE");
+        setSection(studentToEdit.section || sectionsList[0] || "A");
         setGroup(studentToEdit.group || "G1");
-        const existingSub = Array.isArray(studentToEdit.subjects)
-          ? studentToEdit.subjects.join(", ")
-          : (studentToEdit.subjects || "Data Structures, Operating Systems");
-        setSubjectsStr(existingSub);
+        const existingSubs = Array.isArray(studentToEdit.subjects)
+          ? studentToEdit.subjects
+          : (studentToEdit.subjects ? studentToEdit.subjects.split(",").map(s => s.trim()).filter(Boolean) : [availableSubjects[0] || "Data Structures"]);
+        setSelectedSubjects(existingSubs);
 
         const existingPhoto = studentToEdit.photoUrl || null;
         setCapturedPoses({
@@ -107,12 +113,12 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
       } else {
         setStudentId(`STU_${Math.floor(100000 + Math.random() * 900000)}`);
         setName("");
-        setDepartment("Computer Science");
-        setCourse("B.Tech");
-        setBranch("CSE");
-        setSection("A");
+        setDepartment(deptsList[0] || "Computer Science");
+        setCourse(coursesList[0] || "B.Tech");
+        setBranch(branchesList[0] || "CSE");
+        setSection(sectionsList[0] || "A");
         setGroup("G1");
-        setSubjectsStr("Data Structures, Operating Systems, Database Systems");
+        setSelectedSubjects(availableSubjects.slice(0, 3));
         setCapturedPoses({ center: null, left: null, right: null });
       }
       setCurrentPoseIndex(0);
@@ -126,22 +132,58 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
     }
   }, [isOpen, studentToEdit]);
 
-  if (!isOpen) return null;
+  // Make sure department, course, branch, section are valid defaults when academicSettings change
+  useEffect(() => {
+    if (!department || !deptsList.includes(department)) {
+      if (deptsList[0]) setDepartment(deptsList[0]);
+    }
+    if (!course || !coursesList.includes(course)) {
+      if (coursesList[0]) setCourse(coursesList[0]);
+    }
+    if (!branch || !branchesList.includes(branch)) {
+      if (branchesList[0]) setBranch(branchesList[0]);
+    }
+    if (!section || !sectionsList.includes(section)) {
+      if (sectionsList[0]) setSection(sectionsList[0]);
+    }
+  }, [academicSettings]);
+
+  // Camera preview handler
+  useEffect(() => {
+    if (useCameraMode && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [useCameraMode]);
 
   // Handle Image File Upload (Target pose specific or ALL)
   const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    if (activeUploadPoseTarget === "ALL" && files.length >= 3) {
+      const readers = files.slice(0, 3).map(file => {
+        return new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onload = (evt) => resolve(evt.target.result);
+          reader.readAsDataURL(file);
+        });
+      });
+      Promise.all(readers).then(([c, l, r]) => {
+        setCapturedPoses({ center: c, left: l, right: r });
+      });
+    } else if (activeUploadPoseTarget !== "ALL") {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        const src = event.target.result;
-        if (activeUploadPoseTarget === "ALL") {
-          setCapturedPoses({ center: src, left: src, right: src });
-        } else {
-          setCapturedPoses(prev => ({ ...prev, [activeUploadPoseTarget]: src }));
-        }
+      reader.onload = (evt) => {
+        setCapturedPoses(prev => ({ ...prev, [activeUploadPoseTarget]: evt.target.result }));
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(files[0]);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const url = evt.target.result;
+        setCapturedPoses({ center: url, left: url, right: url });
+      };
+      reader.readAsDataURL(files[0]);
     }
   };
 
@@ -151,84 +193,62 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
   };
 
   // Start Live Webcam Stream (3:4 ratio)
-  const startCamera = async () => {
-    setUseCameraMode(true);
+  const handleStartWebcam = async () => {
     setErrorMessage("");
     try {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: { ideal: 480 }, height: { ideal: 640 }, facingMode: "user" } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
-      }
+      setUseCameraMode(true);
     } catch (err) {
-      setErrorMessage("Could not access camera: " + err.message);
-      setUseCameraMode(false);
+      console.error("Camera access error:", err);
+      setErrorMessage("Could not access webcam. Please ensure camera permissions are allowed.");
     }
   };
 
   // QR Code Phone Camera Session Trigger
   const handleStartQrSession = async () => {
     setErrorMessage("");
-    const sessionId = `qr_sub_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
-    setQrSessionId(sessionId);
-
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const targetUrl = `${origin}/mobile-capture?session=${sessionId}`;
-    setQrUrl(targetUrl);
-
     try {
-      await createMobileCaptureSession(sessionId, { studentId, name });
+      const sess = await createMobileCaptureSession(studentId || `STU_${Date.now()}`);
+      setQrSessionId(sess.sessionId);
+
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const captureUrl = `${origin}/mobile-capture?sessionId=${sess.sessionId}`;
+      setQrUrl(captureUrl);
       setIsQrModalOpen(true);
 
-      // Subscribe to Realtime DB node
-      qrUnsubRef.current = subscribeToMobileCaptureSession(sessionId, (data) => {
-        if (data && data.status === "completed" && Array.isArray(data.photos) && data.photos.length > 0) {
-          const photos = data.photos;
+      const unsub = subscribeToMobileCaptureSession(sess.sessionId, (data) => {
+        if (data && data.status === "completed" && Array.isArray(data.photos) && data.photos.length >= 1) {
           setCapturedPoses({
-            center: photos[0],
-            left: photos[1] || photos[0],
-            right: photos[2] || photos[0]
+            center: data.photos[0],
+            left: data.photos[1] || data.photos[0],
+            right: data.photos[2] || data.photos[0]
           });
-          setQrSuccessMsg("3-Pose photos received from mobile phone!");
-          setTimeout(() => {
-            stopQrSession();
-          }, 1500);
+          setQrSuccessMsg("3-Pose photos received successfully from mobile!");
+          stopQrSession();
         }
       });
+      qrUnsubRef.current = unsub;
     } catch (err) {
+      console.error("Error creating QR session:", err);
       setErrorMessage("Failed to initialize mobile session: " + err.message);
     }
   };
 
-  const handleCopyQrLink = () => {
-    if (qrUrl) {
-      navigator.clipboard.writeText(qrUrl);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
-    }
-  };
-
   // Capture Snapshot for Current Pose Step
-  const captureCurrentPose = () => {
+  const handleCapturePose = () => {
     if (!videoRef.current) return;
+    const video = videoRef.current;
     const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth || 480;
-    canvas.height = videoRef.current.videoHeight || 640;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext("2d");
-    
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    const poseKey = POSES[currentPoseIndex].id;
 
+    const poseKey = POSES[currentPoseIndex].id;
     setCapturedPoses(prev => ({ ...prev, [poseKey]: dataUrl }));
 
     if (currentPoseIndex < POSES.length - 1) {
@@ -241,22 +261,25 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
   const handleRetakePoses = () => {
     setCapturedPoses({ center: null, left: null, right: null });
     setCurrentPoseIndex(0);
-    startCamera();
+    handleStartWebcam();
   };
 
   // Form Submit Handler -> Closes modal and starts background processing snackbar
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setErrorMessage("Please enter the student's name.");
+    setErrorMessage("");
+
+    if (!studentId.trim() || !name.trim()) {
+      setErrorMessage("Student ID and Full Name are required.");
       return;
     }
+
     if (!capturedPoses.center) {
       setErrorMessage("Please capture or upload face photos.");
       return;
     }
 
-    const parsedSubjects = subjectsStr.split(",").flatMap(s => s.split(";")).map(s => s.trim()).filter(Boolean);
+    const parsedSubjects = selectedSubjects.length > 0 ? selectedSubjects : ["General"];
 
     const payload = {
       studentId: studentId.trim(),
@@ -275,174 +298,201 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
       ]
     };
 
-    stopCamera();
-    stopQrSession();
+    onStartRegistration(payload);
     onClose();
-
-    if (onStartRegistration) {
-      onStartRegistration(payload);
-    }
   };
+
+  if (!isOpen) return null;
 
   const currentPose = POSES[currentPoseIndex];
   const isAllPosesCaptured = !!(capturedPoses.center && capturedPoses.left && capturedPoses.right);
   const isEditMode = Boolean(studentToEdit);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto font-sans">
-      <div className="bg-white rounded-3xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
-        {/* Header */}
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              {isEditMode ? <Edit className="w-5 h-5 text-indigo-600" /> : <User className="w-5 h-5 text-indigo-600" />}
-              {isEditMode ? "Edit Student & Re-upload Photo" : "Add New Student Record"}
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {isEditMode ? "Modify student credentials and update biometric reference photos" : "Multi-angle biometric pose capture & background processing"}
-            </p>
+        {/* Modal Header */}
+        <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/30">
+              <User className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="font-extrabold text-lg tracking-tight">
+                {studentToEdit ? "Edit Student Profile" : "Register New Student"}
+              </h2>
+              <p className="text-xs text-slate-400">
+                Multi-angle face enrolment & student master record
+              </p>
+            </div>
           </div>
           <button
-            onClick={() => {
-              stopCamera();
-              stopQrSession();
-              onClose();
-            }}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            onClick={onClose}
+            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        {/* Modal Body Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {errorMessage && (
-            <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
               <span>{errorMessage}</span>
             </div>
           )}
 
           {qrSuccessMsg && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
               <span>{qrSuccessMsg}</span>
             </div>
           )}
 
-          {/* Student Fields Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <Hash className="w-3.5 h-3.5 text-slate-400" /> Student ID
-              </label>
-              <input
-                type="text"
-                required
-                readOnly={isEditMode}
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${isEditMode ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""}`}
-              />
-            </div>
+          {/* Section 1: Basic & Academic Information */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <School className="w-4 h-4 text-indigo-600" /> 1. Academic & Student Info
+            </h3>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <User className="w-3.5 h-3.5 text-slate-400" /> Full Name
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Alex Johnson"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <School className="w-3.5 h-3.5 text-slate-400" /> Department Name
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Computer Science"
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <School className="w-3.5 h-3.5 text-slate-400" /> Course Name
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. B.Tech"
-                value={course}
-                onChange={(e) => setCourse(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <School className="w-3.5 h-3.5 text-slate-400" /> Branch &amp; Section
-              </label>
-              <div className="flex gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                  <Hash className="w-3.5 h-3.5 text-slate-400" /> Student Roll / ID
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="Branch (CSE)"
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  placeholder="e.g. STU_2026_001"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  disabled={!!studentToEdit}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                  <User className="w-3.5 h-3.5 text-slate-400" /> Full Name
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="Sec (A)"
-                  value={section}
-                  onChange={(e) => setSection(e.target.value)}
-                  className="w-24 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  placeholder="e.g. Alex Johnson"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                  <School className="w-3.5 h-3.5 text-slate-400" /> Department Name
+                </label>
+                <select
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                >
+                  {deptsList.map((d, i) => (
+                    <option key={i} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                  <School className="w-3.5 h-3.5 text-slate-400" /> Course / Degree
+                </label>
+                <select
+                  value={course}
+                  onChange={(e) => setCourse(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                >
+                  {coursesList.map((c, i) => (
+                    <option key={i} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                  <School className="w-3.5 h-3.5 text-slate-400" /> Branch &amp; Section
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  >
+                    {branchesList.map((b, i) => (
+                      <option key={i} value={b}>{b}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={section}
+                    onChange={(e) => setSection(e.target.value)}
+                    className="w-28 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  >
+                    {sectionsList.map((sec, i) => (
+                      <option key={i} value={sec}>Sec {sec}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                  <GroupIcon className="w-3.5 h-3.5 text-slate-400" /> Group Allotment
+                </label>
+                <select
+                  value={group}
+                  onChange={(e) => setGroup(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                >
+                  <option value="G1">Group G1</option>
+                  <option value="G2">Group G2</option>
+                  <option value="ALL">ALL Groups (G1 + G2)</option>
+                </select>
               </div>
             </div>
 
+            {/* Interactive Subject Selection Tags */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <GroupIcon className="w-3.5 h-3.5 text-slate-400" /> Group
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <School className="w-3.5 h-3.5 text-indigo-500" /> Enrolled Subjects ({selectedSubjects.length} Selected)
+                </span>
+                <span className="text-[11px] text-slate-400">Click tag to toggle enrolment</span>
               </label>
-              <input
-                type="text"
-                required
-                placeholder="Group (G1, G2)"
-                value={group}
-                onChange={(e) => setGroup(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
+              <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl max-h-36 overflow-y-auto">
+                {availableSubjects.map((sub, idx) => {
+                  const isSelected = selectedSubjects.includes(sub);
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedSubjects(prev => prev.filter(s => s !== sub));
+                        } else {
+                          setSelectedSubjects(prev => [...prev, sub]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+                        isSelected
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      {isSelected ? "✓ " : "+ "}{sub}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-
-          {/* Enrolled Subjects (Multiple Subjects) Input */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-              <School className="w-3.5 h-3.5 text-indigo-500" /> Enrolled Subjects (Comma-separated)
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Data Structures, Operating Systems, Database Management"
-              value={subjectsStr}
-              onChange={(e) => setSubjectsStr(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-            />
-            <p className="text-[10px] text-slate-400 mt-1">
-              Separate multiple subject names using commas or semicolons.
-            </p>
           </div>
 
           {/* Photo & Multi-Angle Pose Section */}

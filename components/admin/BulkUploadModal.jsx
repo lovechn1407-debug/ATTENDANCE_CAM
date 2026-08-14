@@ -14,7 +14,10 @@ import {
 import { parseStudentsCSV } from "@/lib/csvParser";
 import { bulkAddStudents } from "@/lib/firebase";
 
-export default function BulkUploadModal({ isOpen, onClose }) {
+export default function BulkUploadModal({ isOpen, onClose, academicSettings = null }) {
+  const deptsList = academicSettings?.departments || ["Computer Science", "Information Technology", "Electronics & Comm", "Mechanical Engineering"];
+  const coursesList = academicSettings?.courses || ["B.Tech", "M.Tech", "BCA", "MCA"];
+
   const [parsedStudents, setParsedStudents] = useState([]);
   const [fileName, setFileName] = useState("");
   const [isParsing, setIsParsing] = useState(false);
@@ -130,7 +133,9 @@ STU_1003,Robert Brown,Electronics,M.Tech,ECE,B,G1,Signals and Systems; Digital L
               </div>
               <div>
                 <div className="text-xs font-semibold text-slate-800">Need the college CSV layout?</div>
-                <div className="text-[11px] text-slate-500">Download sample template with Dept, Course, Branch, Sec, Group headers.</div>
+                <div className="text-[11px] text-slate-500">
+                  Configured Courses: {coursesList.slice(0, 4).join(", ")} | Depts: {deptsList.slice(0, 3).join(", ")}
+                </div>
               </div>
             </div>
             <button

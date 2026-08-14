@@ -26,7 +26,13 @@ import {
 import { subscribeToStaffs, saveStaff, deleteStaff, bulkAddStaffs } from "@/lib/firebase";
 import { parseStaffsCSV } from "@/lib/csvParser";
 
-export default function StaffManager({ students = [] }) {
+export default function StaffManager({ students = [], academicSettings = null }) {
+  const deptsList = academicSettings?.departments || ["Computer Science", "Information Technology", "Electronics & Comm", "Mechanical Engineering", "Electrical Engineering", "Civil Engineering"];
+  const coursesList = academicSettings?.courses || ["B.Tech", "M.Tech", "BCA", "MCA", "B.Sc", "M.Sc", "MBA", "BBA"];
+  const branchesList = academicSettings?.branches || ["CSE", "IT", "ECE", "ME", "EE", "CE", "AI/ML", "Data Science"];
+  const sectionsList = academicSettings?.sections || ["A", "B", "C", "D", "1", "2"];
+  const subjectsList = academicSettings?.subjects || ["Data Structures", "Operating Systems", "Computer Networks", "Database Systems", "Machine Learning", "Software Engineering"];
+
   const [staffs, setStaffs] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -45,12 +51,12 @@ export default function StaffManager({ students = [] }) {
   const [staffName, setStaffName] = useState("");
   const [password, setPassword] = useState("");
   const [department, setDepartment] = useState("Computer Science");
-  const [subjectsInput, setSubjectsInput] = useState("");
+  const [selectedSubjects, setSelectedSubjects] = useState(["Data Structures", "Operating Systems"]);
   const [allotments, setAllotments] = useState([]);
   const [visiblePasswords, setVisiblePasswords] = useState({});
 
   // Temporary allotment builder inputs
-  const [newAllotSubject, setNewAllotSubject] = useState("");
+  const [newAllotSubject, setNewAllotSubject] = useState("Data Structures");
   const [newAllotDept, setNewAllotDept] = useState("Computer Science");
   const [newAllotCourse, setNewAllotCourse] = useState("B.Tech");
   const [newAllotBranch, setNewAllotBranch] = useState("CSE");
@@ -66,19 +72,40 @@ export default function StaffManager({ students = [] }) {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if (!department || !deptsList.includes(department)) {
+      if (deptsList[0]) setDepartment(deptsList[0]);
+    }
+    if (!newAllotSubject || !subjectsList.includes(newAllotSubject)) {
+      if (subjectsList[0]) setNewAllotSubject(subjectsList[0]);
+    }
+    if (!newAllotDept || !deptsList.includes(newAllotDept)) {
+      if (deptsList[0]) setNewAllotDept(deptsList[0]);
+    }
+    if (!newAllotCourse || !coursesList.includes(newAllotCourse)) {
+      if (coursesList[0]) setNewAllotCourse(coursesList[0]);
+    }
+    if (!newAllotBranch || !branchesList.includes(newAllotBranch)) {
+      if (branchesList[0]) setNewAllotBranch(branchesList[0]);
+    }
+    if (!newAllotSec || !sectionsList.includes(newAllotSec)) {
+      if (sectionsList[0]) setNewAllotSec(sectionsList[0]);
+    }
+  }, [academicSettings]);
+
   const handleOpenAddModal = () => {
     setEditingStaff(null);
     setStaffId("");
     setStaffName("");
     setPassword("");
-    setDepartment("Computer Science");
-    setSubjectsInput("Data Structures, Operating Systems");
+    setDepartment(deptsList[0] || "Computer Science");
+    setSelectedSubjects(subjectsList.slice(0, 2));
     setAllotments([]);
-    setNewAllotSubject("Data Structures");
-    setNewAllotDept("Computer Science");
-    setNewAllotCourse("B.Tech");
-    setNewAllotBranch("CSE");
-    setNewAllotSec("A");
+    setNewAllotSubject(subjectsList[0] || "Data Structures");
+    setNewAllotDept(deptsList[0] || "Computer Science");
+    setNewAllotCourse(coursesList[0] || "B.Tech");
+    setNewAllotBranch(branchesList[0] || "CSE");
+    setNewAllotSec(sectionsList[0] || "A");
     setNewAllotGroup("ALL");
     setErrorMsg("");
     setIsModalOpen(true);
@@ -89,14 +116,17 @@ export default function StaffManager({ students = [] }) {
     setStaffId(staff.staffId || staff.id);
     setStaffName(staff.name || "");
     setPassword(staff.password || "");
-    setDepartment(staff.department || "Computer Science");
-    setSubjectsInput(Array.isArray(staff.subjects) ? staff.subjects.join(", ") : "");
+    setDepartment(staff.department || deptsList[0] || "Computer Science");
+    const existingSubs = Array.isArray(staff.subjects)
+      ? staff.subjects
+      : (staff.subjects ? staff.subjects.split(",").map(s => s.trim()).filter(Boolean) : [subjectsList[0] || "Data Structures"]);
+    setSelectedSubjects(existingSubs);
     setAllotments(Array.isArray(staff.allotments) ? staff.allotments : []);
-    setNewAllotSubject(Array.isArray(staff.subjects) && staff.subjects[0] ? staff.subjects[0] : "Data Structures");
-    setNewAllotDept(staff.department || "Computer Science");
-    setNewAllotCourse("B.Tech");
-    setNewAllotBranch("CSE");
-    setNewAllotSec("A");
+    setNewAllotSubject(existingSubs[0] || subjectsList[0] || "Data Structures");
+    setNewAllotDept(staff.department || deptsList[0] || "Computer Science");
+    setNewAllotCourse(coursesList[0] || "B.Tech");
+    setNewAllotBranch(branchesList[0] || "CSE");
+    setNewAllotSec(sectionsList[0] || "A");
     setNewAllotGroup("ALL");
     setErrorMsg("");
     setIsModalOpen(true);
@@ -104,7 +134,7 @@ export default function StaffManager({ students = [] }) {
 
   const handleAddAllotment = () => {
     if (!newAllotSubject.trim()) {
-      alert("Please enter a subject name for the allotment.");
+      alert("Please select a subject for the allotment.");
       return;
     }
     const newAllotment = {
@@ -118,10 +148,9 @@ export default function StaffManager({ students = [] }) {
     };
     setAllotments(prev => [...prev, newAllotment]);
 
-    // Automatically ensure subject is in subjectsInput
-    const subs = subjectsInput.split(",").map(s => s.trim()).filter(Boolean);
-    if (!subs.includes(newAllotSubject.trim())) {
-      setSubjectsInput(prev => prev ? `${prev}, ${newAllotSubject.trim()}` : newAllotSubject.trim());
+    // Automatically ensure subject is in selectedSubjects list
+    if (!selectedSubjects.includes(newAllotSubject.trim())) {
+      setSelectedSubjects(prev => [...prev, newAllotSubject.trim()]);
     }
   };
 
@@ -148,18 +177,14 @@ export default function StaffManager({ students = [] }) {
     setErrorMsg("");
 
     try {
-      const subjectsList = subjectsInput
-        .split(",")
-        .flatMap(s => s.split(";"))
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const finalSubjects = selectedSubjects.length > 0 ? selectedSubjects : [newAllotSubject || "General"];
 
       await saveStaff({
         staffId: staffId.trim().toUpperCase(),
         name: staffName.trim(),
         password: password.trim(),
         department: department.trim(),
-        subjects: subjectsList,
+        subjects: finalSubjects,
         allotments: allotments
       });
       setIsModalOpen(false);
@@ -492,14 +517,15 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     Department *
                   </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Computer Science"
+                  <select
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:border-indigo-500"
-                  />
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
+                  >
+                    {deptsList.map((d, i) => (
+                      <option key={i} value={d}>{d}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Password */}
@@ -518,19 +544,37 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
                 </div>
               </div>
 
-              {/* Assigned Subjects Category Input */}
+              {/* Assigned Subjects Category Tag Selection */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Subjects Taught (Comma-Separated) *
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+                  <span>Subjects Taught ({selectedSubjects.length} Selected) *</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Click tag to toggle</span>
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Data Structures, Operating Systems, Python"
-                  value={subjectsInput}
-                  onChange={(e) => setSubjectsInput(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:border-indigo-500"
-                />
+                <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl max-h-36 overflow-y-auto">
+                  {subjectsList.map((sub, idx) => {
+                    const isSelected = selectedSubjects.includes(sub);
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedSubjects(prev => prev.filter(s => s !== sub));
+                          } else {
+                            setSelectedSubjects(prev => [...prev, sub]);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+                          isSelected
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        {isSelected ? "✓ " : "+ "}{sub}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* ─── TEACHING ALLOTMENT BUILDER SECTION ─── */}
@@ -543,57 +587,67 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500">Subject</label>
-                    <input
-                      type="text"
-                      placeholder="Data Structures"
+                    <select
                       value={newAllotSubject}
                       onChange={(e) => setNewAllotSubject(e.target.value)}
                       className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                    />
+                    >
+                      {subjectsList.map((s, i) => (
+                        <option key={i} value={s}>{s}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500">Department</label>
-                    <input
-                      type="text"
-                      placeholder="Computer Science"
+                    <select
                       value={newAllotDept}
                       onChange={(e) => setNewAllotDept(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                    />
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                    >
+                      {deptsList.map((d, i) => (
+                        <option key={i} value={d}>{d}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500">Course</label>
-                    <input
-                      type="text"
-                      placeholder="B.Tech"
+                    <select
                       value={newAllotCourse}
                       onChange={(e) => setNewAllotCourse(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                    />
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                    >
+                      {coursesList.map((c, i) => (
+                        <option key={i} value={c}>{c}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500">Branch</label>
-                    <input
-                      type="text"
-                      placeholder="CSE"
+                    <select
                       value={newAllotBranch}
                       onChange={(e) => setNewAllotBranch(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                    />
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                    >
+                      {branchesList.map((b, i) => (
+                        <option key={i} value={b}>{b}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500">Section</label>
-                    <input
-                      type="text"
-                      placeholder="A"
+                    <select
                       value={newAllotSec}
                       onChange={(e) => setNewAllotSec(e.target.value)}
                       className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
-                    />
+                    >
+                      {sectionsList.map((sec, i) => (
+                        <option key={i} value={sec}>Sec {sec}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -603,6 +657,12 @@ STAFF03,Prof. Nikola Tesla,pass789,Electrical,Circuit Analysis; Power Systems`;
                       onChange={(e) => setNewAllotGroup(e.target.value)}
                       className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-indigo-700"
                     >
+                      <option value="ALL">ALL Groups (G1 + G2)</option>
+                      <option value="G1">Group G1 Only</option>
+                      <option value="G2">Group G2 Only</option>
+                    </select>
+                  </div>
+                </div>
                       <option value="ALL">ALL Groups (G1 + G2)</option>
                       <option value="G1">Group G1 Only</option>
                       <option value="G2">Group G2 Only</option>

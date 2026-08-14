@@ -46,6 +46,13 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       badge: "Blocked"
     },
     {
+      id: "academic",
+      label: "Academic Settings",
+      description: "Manage courses, subjects, branches & dropdown options",
+      icon: Sliders,
+      badge: "Options"
+    },
+    {
       id: "camera",
       label: "Configure Screen",
       description: "Select webcam hardware & match sensitivity",
