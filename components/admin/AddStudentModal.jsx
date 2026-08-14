@@ -627,7 +627,7 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <button
                     type="button"
-                    onClick={startCamera}
+                    onClick={handleStartWebcam}
                     className="p-4 border-2 border-indigo-500/30 bg-indigo-50/20 hover:bg-indigo-50/50 rounded-2xl flex flex-col items-center justify-center text-center transition-all group cursor-pointer"
                   >
                     <Camera className="w-6 h-6 text-indigo-600 mb-1 group-hover:scale-110 transition-transform" />
