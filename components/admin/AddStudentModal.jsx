@@ -237,6 +237,14 @@ export default function AddStudentModal({ isOpen, onClose, onStartRegistration, 
     }
   };
 
+  const handleCopyQrLink = () => {
+    if (qrUrl) {
+      navigator.clipboard.writeText(qrUrl);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    }
+  };
+
   // Capture Snapshot for Current Pose Step
   const handleCapturePose = () => {
     if (!videoRef.current) return;
